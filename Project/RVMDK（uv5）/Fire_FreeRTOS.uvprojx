@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_STDPERIPH_DRIVER,STM32F429_439xx,</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\Libraries\CMSIS\Device\ST\STM32F4xx\Include;..\..\Libraries\CMSIS\Include;..\..\Libraries\STM32F4xx_StdPeriph_Driver\inc;..\..\User;..\..\FreeRTOS\include;..\..\FreeRTOS\port\RVDS\ARM_CM4F;..\..\User\key;..\..\User\led;..\..\User\uart;..\..\User\exti;..\..\User\lcd;..\..\User\protocol;..\..\User\sdram;..\..\User\font;..\..\User\sensor;..\..\User\data;..\..\User\gui</IncludePath>
+              <IncludePath>..\..\Libraries\CMSIS\Device\ST\STM32F4xx\Include;..\..\Libraries\CMSIS\Include;..\..\Libraries\STM32F4xx_StdPeriph_Driver\inc;..\..\User;..\..\FreeRTOS\include;..\..\FreeRTOS\port\RVDS\ARM_CM4F;..\..\User\key;..\..\User\led;..\..\User\uart;..\..\User\exti;..\..\User\lcd;..\..\User\protocol;..\..\User\sdram;..\..\User\font;..\..\User\sensor\dht;..\..\User\sensor\mpu6050;..\..\User\data;..\..\User\gui</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
