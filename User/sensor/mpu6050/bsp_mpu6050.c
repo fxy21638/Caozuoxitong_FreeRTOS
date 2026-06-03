@@ -1,3 +1,4 @@
+#include <stddef.h>
 #include "bsp_mpu6050.h"
 #include "bsp_mpu6050_i2c.h"
 #include "inv_mpu.h"

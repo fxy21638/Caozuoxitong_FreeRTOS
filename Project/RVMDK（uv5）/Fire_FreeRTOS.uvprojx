@@ -340,7 +340,7 @@
               <MiscControls></MiscControls>
               <Define>USE_STDPERIPH_DRIVER,STM32F429_439xx,</Define>
               <Undefine></Undefine>
-              <IncludePath>..\..\Libraries\CMSIS\Device\ST\STM32F4xx\Include;..\..\Libraries\CMSIS\Include;..\..\Libraries\STM32F4xx_StdPeriph_Driver\inc;..\..\User;..\..\FreeRTOS\include;..\..\FreeRTOS\port\RVDS\ARM_CM4F;..\..\User\key;..\..\User\led;..\..\User\uart;..\..\User\exti;..\..\User\lcd;..\..\User\protocol;..\..\User\sdram;..\..\User\font</IncludePath>
+              <IncludePath>..\..\Libraries\CMSIS\Device\ST\STM32F4xx\Include;..\..\Libraries\CMSIS\Include;..\..\Libraries\STM32F4xx_StdPeriph_Driver\inc;..\..\User;..\..\FreeRTOS\include;..\..\FreeRTOS\port\RVDS\ARM_CM4F;..\..\User\key;..\..\User\led;..\..\User\uart;..\..\User\exti;..\..\User\lcd;..\..\User\protocol;..\..\User\sdram;..\..\User\font;..\..\User\sensor;..\..\User\data;..\..\User\gui</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -671,6 +671,16 @@
               <FilePath>..\..\User\stm32f4xx_it.c</FilePath>
             </File>
             <File>
+              <FileName>FreeRTOSConfig.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\FreeRTOSConfig.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>BSP</GroupName>
+          <Files>
+            <File>
               <FileName>bsp_led.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\User\led\bsp_led.c</FilePath>
@@ -686,11 +696,6 @@
               <FilePath>..\..\User\uart\bsp_debug_usart.c</FilePath>
             </File>
             <File>
-              <FileName>FreeRTOSConfig.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\User\FreeRTOSConfig.h</FilePath>
-            </File>
-            <File>
               <FileName>bsp_lcd.c</FileName>
               <FileType>1</FileType>
               <FilePath>..\..\User\lcd\bsp_lcd.c</FilePath>
@@ -699,16 +704,6 @@
               <FileName>bsp_lcd.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\..\User\lcd\bsp_lcd.h</FilePath>
-            </File>
-            <File>
-              <FileName>protocol.c</FileName>
-              <FileType>1</FileType>
-              <FilePath>..\..\User\protocol\protocol.c</FilePath>
-            </File>
-            <File>
-              <FileName>protocol.h</FileName>
-              <FileType>5</FileType>
-              <FilePath>..\..\User\protocol\protocol.h</FilePath>
             </File>
             <File>
               <FileName>bsp_sdram.c</FileName>
@@ -729,6 +724,91 @@
               <FileName>fonts.h</FileName>
               <FileType>5</FileType>
               <FilePath>..\..\User\font\fonts.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>PROTOCOL</GroupName>
+          <Files>
+            <File>
+              <FileName>protocol.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\protocol\protocol.c</FilePath>
+            </File>
+            <File>
+              <FileName>protocol.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\protocol\protocol.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>DHT</GroupName>
+          <Files>
+            <File>
+              <FileName>bsp_dht.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\sensor\dht\bsp_dht.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_dht.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\sensor\dht\bsp_dht.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>MPU6050</GroupName>
+          <Files>
+            <File>
+              <FileName>bsp_mpu6050.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\bsp_mpu6050.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_mpu6050.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\bsp_mpu6050.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_mpu6050_i2c.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\bsp_mpu6050_i2c.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_mpu6050_i2c.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\bsp_mpu6050_i2c.h</FilePath>
+            </File>
+            <File>
+              <FileName>dmpKey.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\dmpKey.h</FilePath>
+            </File>
+            <File>
+              <FileName>dmpmap.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\dmpmap.h</FilePath>
+            </File>
+            <File>
+              <FileName>inv_mpu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\inv_mpu.c</FilePath>
+            </File>
+            <File>
+              <FileName>inv_mpu.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\inv_mpu.h</FilePath>
+            </File>
+            <File>
+              <FileName>inv_mpu_dmp_motion_driver.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\inv_mpu_dmp_motion_driver.c</FilePath>
+            </File>
+            <File>
+              <FileName>inv_mpu_dmp_motion_driver.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\sensor\mpu6050\inv_mpu_dmp_motion_driver.h</FilePath>
             </File>
           </Files>
         </Group>

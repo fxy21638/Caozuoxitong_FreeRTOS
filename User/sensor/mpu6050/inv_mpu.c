@@ -2947,10 +2947,7 @@ unsigned short inv_row_2_scale(const signed char *row)
     return b;
 }
 //空函数,未用到.
-void mget_ms(unsigned long *time)
-{
-
-}
+// mget_ms removed (defined in bsp_mpu6050_i2c.c)
 //mpu6050,dmp初始化
 //返回值:0,正常
 //    其他,失败
@@ -2968,7 +2965,7 @@ uint8_t mpu_dmp_init(GPIO_TypeDef* GPIOx, uint16_t GPIO1,uint16_t GPIO2)
 
     GPIO_InitTypeDef  GPIO_InitStructure;      
     GPIO_InitStructure.GPIO_Pin = GPIO1|GPIO2;
-    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
+    GPIO_InitStructure.GPIO_Mode = GPIO_Mode_OUT;
     GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOx, &GPIO_InitStructure);
 /*//如果你要换一个PGIO组那么可以添加下面的代码

@@ -9,6 +9,11 @@
 - **IDE/Toolchain**: Keil MDK V5 (RVMDK uv5), ARM Compiler (CC_ARM)
 - **StdPeriph Library**: STM32F4xx StdPeriph Driver V1.5.0
 - **Project location**: `Project/RVMDK（uv5）/Fire_FreeRTOS.uvprojx`
+- **Commit message language**: 中文 (Chinese)
+
+## Conventions
+
+- Git 提交信息统一使用中文。
 
 ## System Architecture
 
@@ -233,19 +238,21 @@ User/
 ├── protocol/                 # 新建：RS485 协议解析 (地址过滤+CRC)
 │   ├── protocol.h
 │   └── protocol.c
-├── sensor/                   # 新建：传感器驱动
-│   ├── bsp_dht.h
-│   ├── bsp_dht.c             #   DHT11/DHT22 单总线驱动 (待实现)
-│   ├── bsp_mpu6050.h         #   MPU6050 DMP 上层封装
-│   ├── bsp_mpu6050.c         #   MPU6050 DMP 初始化 + 数据读取
-│   ├── bsp_mpu6050_i2c.h     #   MPU6050 专用 I2C1 硬件驱动 (PB6/PB7, 400kHz)
-│   ├── bsp_mpu6050_i2c.c
-│   ├── inv_mpu.h             #   InvenSense 官方 MPU 驱动 (F4 适配)
-│   ├── inv_mpu.c
-│   ├── inv_mpu_dmp_motion_driver.h  #   DMP 固件加载 + 运动处理
-│   ├── inv_mpu_dmp_motion_driver.c
-│   ├── dmpKey.h              #   DMP 固件 key 常量
-│   └── dmpmap.h              #   DMP 内存映射表
+├── sensor/
+│   ├── dht/                  # DHT11/DHT22 单总线驱动
+│   │   ├── bsp_dht.c
+│   │   └── bsp_dht.h
+│   └── mpu6050/              # MPU6050 DMP 驱动 + InvenSense 官方库
+│       ├── bsp_mpu6050.c         #   DMP 初始化 + 数据读取
+│       ├── bsp_mpu6050.h
+│       ├── bsp_mpu6050_i2c.c     #   I2C1 硬件驱动 (PB6/PB7, 400kHz)
+│       ├── bsp_mpu6050_i2c.h
+│       ├── inv_mpu.c             #   InvenSense 官方 MPU 驱动 (F4 适配)
+│       ├── inv_mpu.h
+│       ├── inv_mpu_dmp_motion_driver.c  #   DMP 固件加载 + 运动处理
+│       ├── inv_mpu_dmp_motion_driver.h
+│       ├── dmpKey.h              #   DMP 固件 key 常量
+│       └── dmpmap.h              #   DMP 内存映射表
 ├── gui/                      # 新建：触摸屏 GUI
 │   ├── gui.h
 │   ├── gui.c
