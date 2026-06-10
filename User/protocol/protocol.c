@@ -2,7 +2,7 @@
 #include <string.h>
 
 /* ========================================================================== */
-/*  CRC-8 Lookup Table (polynomial 0x07)                                     */
+/*  CRC-8 查找表 (多项式 0x07 = x^8 + x^2 + x + 1)                            */
 /* ========================================================================== */
 static const uint8_t crc8_table[256] = {
     0x00, 0x07, 0x0E, 0x09, 0x1C, 0x1B, 0x12, 0x15,
@@ -39,6 +39,12 @@ static const uint8_t crc8_table[256] = {
     0xE6, 0xE1, 0xE8, 0xEF, 0xFA, 0xFD, 0xF4, 0xF3
 };
 
+/**
+  * @brief  计算 CRC-8 校验值 (多项式 0x07)
+  * @param  data : 待校验数据指针
+  * @param  len  : 数据长度 (字节)
+  * @retval CRC-8 校验值
+  */
 uint8_t CRC8_Compute(const uint8_t *data, uint16_t len)
 {
     uint8_t crc = 0;
@@ -49,9 +55,15 @@ uint8_t CRC8_Compute(const uint8_t *data, uint16_t len)
 }
 
 /* ========================================================================== */
-/*  Protocol Parser                                                          */
+/*  协议解析器                                                                 */
 /* ========================================================================== */
 
+/**
+  * @brief  初始化协议解析器
+  * @param  parser     : 解析器指针
+  * @param  local_addr : 本机 RS485 地址
+  * @param  is_manager : 1=管理端 (接收所有地址), 0=采集前端 (仅接收本机地址)
+  */
 void Protocol_Init(ProtocolParser_t *parser, uint8_t local_addr, uint8_t is_manager)
 {
     memset(parser, 0, sizeof(ProtocolParser_t));
@@ -60,22 +72,40 @@ void Protocol_Init(ProtocolParser_t *parser, uint8_t local_addr, uint8_t is_mana
     parser->state = STATE_WAIT_HEADER;
 }
 
+/**
+  * @brief  重置解析器到初始状态（帧超时时调用）
+  */
 void Protocol_Reset(ProtocolParser_t *parser)
 {
-    parser->state      = STATE_WAIT_HEADER;
-    parser->byte_count = 0;
+    parser->state       = STATE_WAIT_HEADER;
+    parser->byte_count  = 0;
     parser->frame_ready = 0;
 }
 
+/**
+  * @brief  清除帧就绪标志（任务处理完帧后调用）
+  */
 void Protocol_ClearFrame(ProtocolParser_t *parser)
 {
     parser->frame_ready = 0;
 }
 
 /**
-  * Feed one byte into the state machine.
-  * Returns 1 when a complete, valid frame has been parsed (check parser->frame).
-  * Returns 0 otherwise (still receiving or invalid frame discarded).
+  * @brief  喂入一个字节到状态机
+  * @retval 1 = 完整合法帧已解析 (通过 parser->frame 访问)
+  *         0 = 仍在接收或帧已被丢弃
+  *
+  *  状态机流程:
+  *    WAIT_HEADER → 收到 0xAA → WAIT_ADDR
+  *    WAIT_ADDR   → 地址过滤    → WAIT_LEN
+  *    WAIT_LEN    → 长度校验    → WAIT_TYPE
+  *    WAIT_TYPE   → 记录类型    → WAIT_DATA 或 WAIT_CRC
+  *    WAIT_DATA   → 收 N 字节   → WAIT_CRC
+  *    WAIT_CRC    → CRC 校验    → WAIT_TAIL 或丢弃复位
+  *    WAIT_TAIL   → 确认 0x55   → 帧就绪 → 回到 WAIT_HEADER
+  *
+  *  校验范围: 从帧头 (0xAA) 到 CRC 前一字节
+  *  地址过滤: 管理端接收所有地址，前端仅处理匹配自身地址的帧
   */
 uint8_t Protocol_FeedByte(ProtocolParser_t *parser, uint8_t byte)
 {
@@ -93,43 +123,43 @@ uint8_t Protocol_FeedByte(ProtocolParser_t *parser, uint8_t byte)
         parser->rx_buf[1] = byte;
         parser->byte_count = 2;
 
-        /* Address filter (collectors only process frames addressed to them) */
+        /* 地址过滤：管理端接收所有地址；前端仅处理本机地址 */
         if (parser->is_manager) {
             parser->state = STATE_WAIT_LEN;
         } else if (byte == parser->local_addr) {
             parser->state = STATE_WAIT_LEN;
         } else {
-            /* Not for us, discard */
-            parser->state = STATE_WAIT_HEADER;
+            parser->state = STATE_WAIT_HEADER;   /* 非本机地址，丢弃 */
         }
         break;
 
     case STATE_WAIT_LEN:
+        /* 长度合法性检查：Len = Type + Data 字节数 */
         if (byte > PROTOCOL_MAX_DATA) {
-            /* Payload too large, discard */
             parser->state = STATE_WAIT_HEADER;
             break;
         }
         parser->rx_buf[2] = byte;
         parser->byte_count = 3;
-        parser->exp_data_len = byte;       /* Len = Type + Data bytes count */
+        parser->exp_data_len = byte;          /* Len 包含 Type 字节 */
         parser->state = STATE_WAIT_TYPE;
         break;
 
     case STATE_WAIT_TYPE:
-        parser->rx_buf[3]            = byte;
-        parser->frame.type           = byte;
-        parser->frame.data_len       = 0;
-        parser->byte_count           = 4;
-        parser->exp_data_len        -= 1;  /* Subtract Type byte */
+        parser->rx_buf[3]        = byte;
+        parser->frame.type       = byte;
+        parser->frame.data_len   = 0;
+        parser->byte_count       = 4;
+        parser->exp_data_len   -= 1;          /* 减去 Type 字节 */
         if (parser->exp_data_len > 0) {
             parser->state = STATE_WAIT_DATA;
         } else {
-            parser->state = STATE_WAIT_CRC;
+            parser->state = STATE_WAIT_CRC;   /* 仅 Type 无数据，直接校验 CRC */
         }
         break;
 
     case STATE_WAIT_DATA:
+        /* 逐字节接收数据载荷 */
         parser->rx_buf[parser->byte_count] = byte;
         parser->frame.data[parser->frame.data_len++] = byte;
         parser->byte_count++;
@@ -143,22 +173,20 @@ uint8_t Protocol_FeedByte(ProtocolParser_t *parser, uint8_t byte)
         uint8_t expected_crc;
         parser->rx_buf[parser->byte_count] = byte;
         parser->byte_count++;
-        /* Compute CRC over header through last data byte */
+        /* 计算 CRC 范围: rx_buf[0] ~ rx_buf[byte_count-2] (不含 CRC 字节) */
         expected_crc = CRC8_Compute(parser->rx_buf, parser->byte_count - 1);
         if (byte == expected_crc) {
             parser->state = STATE_WAIT_TAIL;
         } else {
-            /* CRC mismatch, discard */
-            parser->state = STATE_WAIT_HEADER;
+            parser->state = STATE_WAIT_HEADER;   /* CRC 校验失败，丢弃整帧 */
         }
         break;
     }
 
     case STATE_WAIT_TAIL:
         if (byte == PROTOCOL_TAIL) {
-            /* Complete valid frame */
             parser->frame.addr = parser->rx_buf[1];
-            parser->frame_ready = 1;
+            parser->frame_ready = 1;             /* 完整合法帧就绪 */
         }
         parser->state = STATE_WAIT_HEADER;
         break;
@@ -171,18 +199,24 @@ uint8_t Protocol_FeedByte(ProtocolParser_t *parser, uint8_t byte)
     return parser->frame_ready;
 }
 
+/**
+  * @brief  查询是否有完整帧就绪
+  */
 uint8_t Protocol_IsFrameReady(ProtocolParser_t *parser)
 {
     return parser->frame_ready;
 }
 
 /* ========================================================================== */
-/*  Frame Building                                                           */
+/*  帧组包                                                                     */
 /* ========================================================================== */
 
 /**
-  * Build a request frame (Type only, no extra data).
-  * Returns total frame length.
+  * @brief  构建请求帧（仅 Type，无额外数据）
+  * @param  out_buf   : 输出缓冲区
+  * @param  dest_addr : 目标地址
+  * @param  msg_type  : 消息类型
+  * @retval 完整帧长度
   */
 uint8_t Protocol_BuildRequest(uint8_t *out_buf, uint8_t dest_addr, uint8_t msg_type)
 {
@@ -190,9 +224,14 @@ uint8_t Protocol_BuildRequest(uint8_t *out_buf, uint8_t dest_addr, uint8_t msg_t
 }
 
 /**
-  * Build a response/command frame with optional data payload.
-  * Frame: AA + Addr + Len + Type + Data[] + CRC + 55
-  * Returns total frame length.
+  * @brief  构建应答/控制帧（Type + Data）
+  *         帧结构: AA + Addr + Len + Type + Data[] + CRC + 55
+  * @param  out_buf   : 输出缓冲区
+  * @param  dest_addr : 目标地址
+  * @param  msg_type  : 消息类型
+  * @param  data      : 数据载荷指针 (可为 NULL)
+  * @param  data_len  : 数据载荷长度
+  * @retval 完整帧长度
   */
 uint8_t Protocol_BuildResponse(uint8_t *out_buf, uint8_t dest_addr,
                                 uint8_t msg_type, const uint8_t *data, uint8_t data_len)
@@ -201,21 +240,21 @@ uint8_t Protocol_BuildResponse(uint8_t *out_buf, uint8_t dest_addr,
     uint8_t len;
     uint8_t crc;
 
-    len = data_len + 1;  /* Type byte + data bytes */
+    len = data_len + 1;                /* Len = Type 字节 + Data 字节 */
 
-    out_buf[idx++] = PROTOCOL_HEADER;   /* Header  */
-    out_buf[idx++] = dest_addr;         /* Address */
-    out_buf[idx++] = len;              /* Length  */
-    out_buf[idx++] = msg_type;         /* Type    */
+    out_buf[idx++] = PROTOCOL_HEADER;  /* 帧头   */
+    out_buf[idx++] = dest_addr;        /* 地址   */
+    out_buf[idx++] = len;              /* 长度   */
+    out_buf[idx++] = msg_type;         /* 类型   */
 
     if (data_len > 0 && data != NULL) {
         memcpy(&out_buf[idx], data, data_len);
         idx += data_len;
     }
 
-    crc = CRC8_Compute(out_buf, idx);
+    crc = CRC8_Compute(out_buf, idx);  /* CRC 覆盖帧头~数据末 */
     out_buf[idx++] = crc;
-    out_buf[idx++] = PROTOCOL_TAIL;
+    out_buf[idx++] = PROTOCOL_TAIL;    /* 帧尾   */
 
     return idx;
 }

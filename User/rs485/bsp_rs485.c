@@ -1,12 +1,12 @@
 #include "bsp_rs485.h"
 
-/* Ring buffer for ISR-to-task byte transfer */
-static volatile uint8_t rs485_rx_ring[RS485_RX_BUF_SIZE];
+/* ISR → 任务 字节传递环形缓冲 */
+static volatile uint8_t  rs485_rx_ring[RS485_RX_BUF_SIZE];
 static volatile uint16_t rs485_rx_wr;
 static volatile uint16_t rs485_rx_rd;
 
 /* -------------------------------------------------------------------------- */
-/*  RS485 Hardware Initialization                                            */
+/*  RS485 硬件初始化                                                           */
 /* -------------------------------------------------------------------------- */
 void RS485_Init(void)
 {
@@ -14,11 +14,11 @@ void RS485_Init(void)
     USART_InitTypeDef usart;
     NVIC_InitTypeDef  nvic;
 
-    /* ---- GPIO clocks ---- */
+    /* ---- 使能 GPIO 时钟 ---- */
     RCC_AHB1PeriphClockCmd(RS485_GPIO_PORT_CLK | RS485_DE_PORT_CLK, ENABLE);
     RCC_APB1PeriphClockCmd(RS485_USART_CLK, ENABLE);
 
-    /* ---- USART2 TX (PD5) : AF push-pull ---- */
+    /* ---- USART2 TX (PD5)：复用推挽 ---- */
     gpio.GPIO_Pin   = RS485_TX_PIN;
     gpio.GPIO_Mode  = GPIO_Mode_AF;
     gpio.GPIO_OType = GPIO_OType_PP;
@@ -27,7 +27,7 @@ void RS485_Init(void)
     GPIO_Init(RS485_TX_PORT, &gpio);
     GPIO_PinAFConfig(RS485_TX_PORT, GPIO_PinSource5, RS485_GPIO_AF);
 
-    /* ---- USART2 RX (PD6) : AF pull-up ---- */
+    /* ---- USART2 RX (PD6)：复用上拉 ---- */
     gpio.GPIO_Pin   = RS485_RX_PIN;
     gpio.GPIO_Mode  = GPIO_Mode_AF;
     gpio.GPIO_OType = GPIO_OType_PP;
@@ -36,7 +36,7 @@ void RS485_Init(void)
     GPIO_Init(RS485_RX_PORT, &gpio);
     GPIO_PinAFConfig(RS485_RX_PORT, GPIO_PinSource6, RS485_GPIO_AF);
 
-    /* ---- DE/RE (PG14) : push-pull output, default RX ---- */
+    /* ---- DE/RE (PG14)：推挽输出, 默认接收模式 ---- */
     gpio.GPIO_Pin   = RS485_DE_PIN;
     gpio.GPIO_Mode  = GPIO_Mode_OUT;
     gpio.GPIO_OType = GPIO_OType_PP;
@@ -45,7 +45,7 @@ void RS485_Init(void)
     GPIO_Init(RS485_DE_PORT, &gpio);
     RS485_RX_MODE();
 
-    /* ---- USART2 : 115200 8N1 ---- */
+    /* ---- USART2：115200 8N1 ---- */
     USART_StructInit(&usart);
     usart.USART_BaudRate            = RS485_BAUDRATE;
     usart.USART_WordLength          = USART_WordLength_8b;
@@ -55,26 +55,26 @@ void RS485_Init(void)
     usart.USART_Mode                = USART_Mode_Rx | USART_Mode_Tx;
     USART_Init(RS485_USART, &usart);
 
-    /* ---- NVIC : RXNE interrupt (preempt 6, sub 0) ---- */
+    /* ---- NVIC：RXNE 中断, 抢占优先级 6, 子优先级 0 ---- */
     nvic.NVIC_IRQChannel                   = RS485_USART_IRQn;
     nvic.NVIC_IRQChannelPreemptionPriority = 6;
     nvic.NVIC_IRQChannelSubPriority        = 0;
     nvic.NVIC_IRQChannelCmd                = ENABLE;
     NVIC_Init(&nvic);
 
-    /* Enable RXNE interrupt; TC interrupt enabled on-demand in StartTx */
+    /* 使能 RXNE 中断；TC 中断在 StartTx 时按需开启 */
     USART_ITConfig(RS485_USART, USART_IT_RXNE, ENABLE);
 
-    /* Enable USART */
+    /* 使能 USART */
     USART_Cmd(RS485_USART, ENABLE);
 
-    /* Reset ring buffer */
+    /* 复位环形缓冲指针 */
     rs485_rx_wr = 0;
     rs485_rx_rd = 0;
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Send API (called from task context)                                      */
+/*  发送接口（任务上下文调用）                                                   */
 /* -------------------------------------------------------------------------- */
 void RS485_SendByte(uint8_t byte)
 {
@@ -90,7 +90,7 @@ void RS485_SendBytes(const uint8_t *data, uint16_t len)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  DE/RE Control                                                            */
+/*  DE/RE 方向控制                                                             */
 /* -------------------------------------------------------------------------- */
 void RS485_StartTx(void)
 {
@@ -100,14 +100,14 @@ void RS485_StartTx(void)
 
 void RS485_FinishTx(void)
 {
-    /* Wait for TC then switch to RX */
+    /* 等待发送完成, 然后切回接收模式 */
     while (USART_GetFlagStatus(RS485_USART, USART_FLAG_TC) == RESET);
     RS485_RX_MODE();
     USART_ITConfig(RS485_USART, USART_IT_TC, DISABLE);
 }
 
 /* -------------------------------------------------------------------------- */
-/*  RX Ring Buffer (called from ISR)                                         */
+/*  接收环形缓冲（ISR 调用）                                                    */
 /* -------------------------------------------------------------------------- */
 uint8_t RS485_RxISR(void)
 {
@@ -118,7 +118,7 @@ uint8_t RS485_RxISR(void)
         RS485_RingPut(byte);
     }
 
-    /* Clear ORE if set (prevents RXNE lockup) */
+    /* 清除 ORE 溢出标志，防止 RXNE 锁死 */
     if (USART_GetFlagStatus(RS485_USART, USART_FLAG_ORE) != RESET) {
         (void)USART_ReceiveData(RS485_USART);
     }
@@ -126,20 +126,20 @@ uint8_t RS485_RxISR(void)
     return byte;
 }
 
-/* Ring write (ISR side) */
+/* 环形缓冲写入（ISR 侧） */
 uint8_t RS485_RingPut(uint8_t byte)
 {
     uint16_t next = (rs485_rx_wr + 1) % RS485_RX_BUF_SIZE;
-    if (next == rs485_rx_rd) return 0;   /* full */
+    if (next == rs485_rx_rd) return 0;   /* 缓冲满 */
     rs485_rx_ring[rs485_rx_wr] = byte;
     rs485_rx_wr = next;
     return 1;
 }
 
-/* Ring read (task side) */
+/* 环形缓冲读取（任务侧） */
 uint8_t RS485_RingRead(uint8_t *byte)
 {
-    if (rs485_rx_wr == rs485_rx_rd) return 0;  /* empty */
+    if (rs485_rx_wr == rs485_rx_rd) return 0;  /* 缓冲空 */
     *byte = rs485_rx_ring[rs485_rx_rd];
     rs485_rx_rd = (rs485_rx_rd + 1) % RS485_RX_BUF_SIZE;
     return 1;

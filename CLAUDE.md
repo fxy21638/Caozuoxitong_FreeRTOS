@@ -13,7 +13,9 @@
 
 ## Conventions
 
-- Git 提交信息统一使用中文。
+- Git 提交信息统一使用中文
+- 代码注释使用中文
+- **除非用户明确说"提交"，否则不要主动 git commit/push**
 
 ## System Architecture
 

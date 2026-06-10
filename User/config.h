@@ -2,7 +2,7 @@
 #define __CONFIG_H
 
 /* -------------------------------------------------------------------------- */
-/*  Device Role Selection (uncomment one)                                     */
+/*  设备角色选择（取消注释即可切换）                                             */
 /* -------------------------------------------------------------------------- */
 #define ROLE_MANAGER      1
 #define ROLE_COLLECTOR_1  2
@@ -11,7 +11,7 @@
 #define DEVICE_ROLE  ROLE_MANAGER
 
 /* -------------------------------------------------------------------------- */
-/*  RS485 Address                                                            */
+/*  RS485 本机地址                                                            */
 /* -------------------------------------------------------------------------- */
 #if DEVICE_ROLE == ROLE_MANAGER
   #define DEVICE_ADDR  0x01
@@ -24,25 +24,25 @@
 #endif
 
 /* -------------------------------------------------------------------------- */
-/*  Timing Parameters (ms)                                                   */
+/*  时序参数 (ms)                                                             */
 /* -------------------------------------------------------------------------- */
-#define POLL_INTERVAL_MS    10000   /* Manager polling cycle                 */
-#define RETRY_TIMEOUT_MS    500     /* Manager retry timeout                  */
-#define FRAME_TIMEOUT_MS    100     /* Inter-byte frame timeout               */
+#define POLL_INTERVAL_MS    10000   /* 管理端轮询周期                          */
+#define RETRY_TIMEOUT_MS    500     /* 管理端重读超时                          */
+#define FRAME_TIMEOUT_MS    100     /* 帧间字节超时                            */
 
 /* -------------------------------------------------------------------------- */
-/*  Sensor Intervals (ms)                                                    */
+/*  传感器采集间隔 (ms)                                                       */
 /* -------------------------------------------------------------------------- */
-#define DHT_INTERVAL_MS     5000    /* Collector-1 DHT read interval          */
-#define MPU6050_INTERVAL_MS 2000    /* Collector-2 MPU6050 read interval      */
+#define DHT_INTERVAL_MS     5000    /* 采集前端1：DHT 温湿度                    */
+#define MPU6050_INTERVAL_MS 2000    /* 采集前端2：MPU6050 姿态                  */
 
 /* -------------------------------------------------------------------------- */
-/*  Data Store Depth                                                         */
+/*  数据存储深度                                                              */
 /* -------------------------------------------------------------------------- */
 #define STORE_DEPTH         10
 
 /* -------------------------------------------------------------------------- */
-/*  RS485 Max Frame Payload (bytes, excluding header/tail/CRC)               */
+/*  RS485 帧最大载荷（不含帧头/帧尾/CRC）                                       */
 /* -------------------------------------------------------------------------- */
 #define RS485_MAX_PAYLOAD   32
 

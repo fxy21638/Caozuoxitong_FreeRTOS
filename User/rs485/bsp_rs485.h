@@ -5,7 +5,7 @@
 #include <stdint.h>
 
 /* -------------------------------------------------------------------------- */
-/*  USART Selection (USART2: PD5=TX, PD6=RX)                                 */
+/*  USART 选择（USART2：PD5=TX, PD6=RX）                                       */
 /* -------------------------------------------------------------------------- */
 #define RS485_USART             USART2
 #define RS485_USART_CLK         RCC_APB1Periph_USART2
@@ -20,7 +20,7 @@
 #define RS485_GPIO_AF           GPIO_AF_USART2
 
 /* -------------------------------------------------------------------------- */
-/*  DE/RE Control (PG14: high=TX, low=RX)                                    */
+/*  DE/RE 方向控制（PG14：高电平=发送, 低电平=接收）                             */
 /* -------------------------------------------------------------------------- */
 #define RS485_DE_PORT           GPIOG
 #define RS485_DE_PIN            GPIO_Pin_14
@@ -30,23 +30,23 @@
 #define RS485_RX_MODE()         GPIO_ResetBits(RS485_DE_PORT, RS485_DE_PIN)
 
 /* -------------------------------------------------------------------------- */
-/*  RX Ring Buffer Size                                                      */
+/*  接收环形缓冲大小                                                            */
 /* -------------------------------------------------------------------------- */
 #define RS485_RX_BUF_SIZE       256
 
 /* -------------------------------------------------------------------------- */
-/*  Public API                                                               */
+/*  公开接口                                                                   */
 /* -------------------------------------------------------------------------- */
 void     RS485_Init(void);
 void     RS485_SendByte(uint8_t byte);
 void     RS485_SendBytes(const uint8_t *data, uint16_t len);
-void     RS485_StartTx(void);            /* Set DE high, enable TC interrupt  */
-void     RS485_FinishTx(void);           /* Set DE low, back to RX mode       */
+void     RS485_StartTx(void);            /* 拉高 DE, 进入发送模式               */
+void     RS485_FinishTx(void);           /* 等待发送完成, 拉低 DE 回到接收模式   */
 
-/* ISR helpers */
-uint8_t  RS485_RxISR(void);              /* ISR: read DR, clear ORE, push ring */
+/* 中断服务函数 */
+uint8_t  RS485_RxISR(void);              /* ISR 中调用：读 DR, 清 ORE, 存入环形缓冲 */
 
-/* Ring buffer (ISR writes, task reads) */
+/* 环形缓冲（ISR 写, 任务读） */
 uint8_t  RS485_RingPut(uint8_t byte);
 uint8_t  RS485_RingRead(uint8_t *byte);
 
