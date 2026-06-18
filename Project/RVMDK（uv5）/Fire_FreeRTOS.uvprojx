@@ -730,6 +730,46 @@
               <FileType>5</FileType>
               <FilePath>..\..\User\font\fonts.h</FilePath>
             </File>
+            <File>
+              <FileName>gui.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\gui\gui.c</FilePath>
+            </File>
+            <File>
+              <FileName>gui.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\gui\gui.h</FilePath>
+            </File>
+            <File>
+              <FileName>touch.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\gui\touch.c</FilePath>
+            </File>
+            <File>
+              <FileName>touch.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\gui\touch.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_spi_flash.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\flash\bsp_spi_flash.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_spi_flash.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\flash\bsp_spi_flash.h</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_exti.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\exti\bsp_exti.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_exti.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\exti\bsp_exti.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

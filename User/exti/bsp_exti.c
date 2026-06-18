@@ -80,7 +80,7 @@ void EXTI_Key_Config(void)
   /* 中断模式 */
   EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
   /* 下降沿触发 */
-  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising;  
+  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Falling;  
   /* 使能中断/事件线 */
   EXTI_InitStructure.EXTI_LineCmd = ENABLE;
   EXTI_Init(&EXTI_InitStructure);
