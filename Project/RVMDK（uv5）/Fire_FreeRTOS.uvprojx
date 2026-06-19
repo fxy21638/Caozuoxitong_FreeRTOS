@@ -770,6 +770,36 @@
               <FileType>5</FileType>
               <FilePath>..\..\User\exti\bsp_exti.h</FilePath>
             </File>
+            <File>
+              <FileName>bsp_i2c_touch.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\touch\bsp_i2c_touch.c</FilePath>
+            </File>
+            <File>
+              <FileName>bsp_i2c_touch.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\touch\bsp_i2c_touch.h</FilePath>
+            </File>
+            <File>
+              <FileName>gt9xx.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\touch\gt9xx.c</FilePath>
+            </File>
+            <File>
+              <FileName>gt9xx.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\touch\gt9xx.h</FilePath>
+            </File>
+            <File>
+              <FileName>palette.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>..\..\User\touch\palette.c</FilePath>
+            </File>
+            <File>
+              <FileName>palette.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>..\..\User\touch\palette.h</FilePath>
+            </File>
           </Files>
         </Group>
         <Group>

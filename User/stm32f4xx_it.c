@@ -12,6 +12,7 @@
 #include "timers.h"
 #include "bsp_debug_usart.h"
 #include "./rs485/bsp_rs485.h"
+#include "semphr.h"
 #include "bsp_led.h"
 
 extern void xPortSysTickHandler(void);
@@ -104,4 +105,22 @@ void USART2_IRQHandler(void)
 
   /* 如果唤醒了更高优先级任务，触发上下文切换 */
   portYIELD_FROM_ISR(pxHigherPriorityTaskWoken);
+}
+
+/* ========================================================================== */
+/*  EXTI15_10 — GT9xx 触摸屏中断 (PD13, 下降沿)                                */
+/*  极轻量 ISR: 仅 give 信号量，I2C 读取在任务上下文完成                        */
+/* ========================================================================== */
+extern QueueHandle_t xTouchSemaphore;
+
+void EXTI15_10_IRQHandler(void)
+{
+  BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+  if (EXTI_GetITStatus(EXTI_Line13) != RESET)
+  {
+    EXTI_ClearITPendingBit(EXTI_Line13);
+    xSemaphoreGiveFromISR(xTouchSemaphore, &xHigherPriorityTaskWoken);
+    portYIELD_FROM_ISR(xHigherPriorityTaskWoken);
+  }
 }

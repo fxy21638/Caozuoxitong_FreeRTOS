@@ -1,9 +1,9 @@
 /* ========================================================================== */
-/*  gui.c �?Manager LCD GUI (left-right card layout + blue-white theme)       */
+/*  gui.c �?Manager LCD GUI (left-right card layout + blue-white theme)       */
 /*                                                                             */
 /*  Layout: Title | DHT card (L) + MPU card (R) | History (L+R cols) | Status  */
 /*  Theme:  Blue-white, clean modern look                                       */
-/*  Input:  KEY1(PA0)→DHT  KEY2(PC13)→MPU  非阻塞消�?                          */
+/*  Input:  KEY1(PA0)→DHT  KEY2(PC13)→MPU  非阻塞消�?                          */
 /* ========================================================================== */
 
 #include "./gui.h"
@@ -11,8 +11,10 @@
 #include "../key/bsp_key.h"
 #include "../protocol/protocol.h"
 #include "../config.h"
+#include "../touch/gt9xx.h"
 #include "FreeRTOS.h"
 #include "task.h"
+#include "semphr.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -20,13 +22,13 @@
 /*  Blue-White Theme Palette (ARGB1555)                                        */
 /*  ARGB1555: bit15 = 0=不透明, 1=透明                                         */
 /* ========================================================================== */
-#define COL_BLACK 0x0000   /* 不透明�?(0x8000 = 透明�? 不能�?              */
-#define COL_WHITE 0x7FFF   /* 不透明�?                                      */
-#define COL_BLUE  0x001F   /* 不透明�?(bit15=0)                            */
+#define COL_BLACK 0x0000   /* 不透明�?(0x8000 = 透明�? 不能�?              */
+#define COL_WHITE 0x7FFF   /* 不透明�?                                      */
+#define COL_BLUE  0x001F   /* 不透明�?(bit15=0)                            */
 #define COL_LBLUE 0x1D1F   /* 不透明淡蓝                                     */
-#define COL_PALE  0x4EBF   /* 不透明淡色 (用于历史行交�?                    */
+#define COL_PALE  0x4EBF   /* 不透明淡色 (用于历史行交�?                    */
 #define COL_DIM   0x630C   /* 暗灰 (非透明)                                  */
-#define COL_DATA  0x001F   /* 数据�?= �?                                   */
+#define COL_DATA  0x001F   /* 数据�?= �?                                   */
 #define COL_GREEN 0x03E0   /* 绿色                                           */
 
 /* ========================================================================== */
@@ -58,14 +60,15 @@
 #define STAT_Y (HIST_BODY_Y + HIST_BODY_H)
 #define STAT_H 52
 
-/* ---- Touch buttons ---- */
-#define BTN_H     24
-#define BTN_DHT_X 72
-#define BTN_DHT_Y 224
+/* ---- Touch buttons (centered in each card) ---- */
+#define BTN_H     28
+#define BTN_DHT_X 134
+#define BTN_DHT_Y 218
 #define BTN_DHT_W 140
-#define BTN_MPU_X 488
-#define BTN_MPU_Y 224
+#define BTN_MPU_X 532
+#define BTN_MPU_Y 218
 #define BTN_MPU_W 140
+#define TOUCH_COOLDOWN_MS  400
 
 #define KEY_DEBOUNCE_MS    40
 #define KEY_LONG_PRESS_MS  500
@@ -102,6 +105,9 @@ typedef struct
 } RS485TxRequest_t;
 
 extern QueueHandle_t g_tx_queue;
+extern QueueHandle_t xTouchQueue;
+extern QueueHandle_t xTouchSemaphore;
+typedef struct { int32_t x; int32_t y; } TouchEvent_t;
 
 /* ========================================================================== */
 /*  GUI internal state                                                         */
@@ -136,7 +142,7 @@ static void Put(uint16_t x, uint16_t y, uint16_t fg, uint16_t bg, const char *s)
 }
 
 /* ========================================================================== */
-/*  Draw button (simple, avoids DMA2D overflow)                                  */
+/*  Draw solid button                                                            */
 /* ========================================================================== */
 static void DrawButton(int x, int y, int w, int h, uint16_t fill)
 {
@@ -150,6 +156,7 @@ static void DrawButton(int x, int y, int w, int h, uint16_t fill)
 static void DrawButtons(void)
 {
     DrawButton(BTN_DHT_X, BTN_DHT_Y, BTN_DHT_W, BTN_H, COL_BLUE);
+    /* 8x16 字体: 8 字符=64px, 按钮宽140 → (140-64)/2=38; 按钮高28 → (28-16)/2=6 */
     Put(BTN_DHT_X + 38, BTN_DHT_Y + 6, COL_WHITE, COL_BLUE, "REQ  DHT");
     DrawButton(BTN_MPU_X, BTN_MPU_Y, BTN_MPU_W, BTN_H, COL_BLUE);
     Put(BTN_MPU_X + 38, BTN_MPU_Y + 6, COL_WHITE, COL_BLUE, "REQ  MPU");
@@ -160,6 +167,13 @@ static void DrawButtons(void)
 /* ========================================================================== */
 static void HandleTouch(uint16_t x, uint16_t y)
 {
+    static uint32_t last_touch_tick = 0;
+    uint32_t now = xTaskGetTickCount();
+
+    /* 消抖: 400ms 内忽略重复触摸 */
+    if ((now - last_touch_tick) < pdMS_TO_TICKS(TOUCH_COOLDOWN_MS)) return;
+    last_touch_tick = now;
+
     RS485TxRequest_t req;
     if (x >= BTN_DHT_X && x < BTN_DHT_X + BTN_DHT_W &&
         y >= BTN_DHT_Y && y < BTN_DHT_Y + BTN_H) {
@@ -229,7 +243,7 @@ static void DrawStaticUI(void)
     Put(R_X + VAL_X, 164, COL_DIM, COL_LBLUE, "Wait...");
     Put(R_X + VAL_X, 192, COL_DIM, COL_LBLUE, "--     ");
 
-    /* (按键提示已删�? */
+    /* (按键提示已删�? */
 
     /* Touch buttons */
     DrawButtons();
@@ -391,10 +405,10 @@ static void HistoryAdd(const GUIMsg_t *msg)
 }
 
 /* ========================================================================== */
-/*  GUI Task �?非阻塞按�?+ 传感器显�?+ 历史记录                                */
+/*  GUI Task �?非阻塞按�?+ 传感器显�?+ 历史记录                                */
 /*                                                                             */
-/*  按键检�? �?20ms 读一�?GPIO, 下降�?(1�?) 触发, 无阻�?                   */
-/*  KEY1(PA0) �?请求 DHT    KEY2(PC13) �?请求 MPU                              */
+/*  按键检�? �?20ms 读一�?GPIO, 下降�?(1�?) 触发, 无阻�?                   */
+/*  KEY1(PA0) �?请求 DHT    KEY2(PC13) �?请求 MPU                              */
 /* ========================================================================== */
 void GUI_Task(void *pvParameters)
 {
@@ -404,7 +418,7 @@ void GUI_Task(void *pvParameters)
     LCD_SetLayer(LCD_FOREGROUND_LAYER);
     LCD_Clear(COL_BLACK);
 
-    /* 按键消抖: KEY1=PA0 短按DHT/长按MPU, KEY2=PC13 仅诊�?*/
+    /* 按键消抖: KEY1=PA0 短按DHT/长按MPU, KEY2=PC13 仅诊�?*/
     /* KEY1: short press DHT, long press MPU. Active level follows KEY_ON. */
     uint8_t  k1_raw = GPIO_ReadInputDataBit(KEY1_GPIO_PORT, KEY1_PIN);
     uint8_t  k1_last_raw = k1_raw;
@@ -416,7 +430,7 @@ void GUI_Task(void *pvParameters)
     uint8_t  k2_stable = k2_raw;
     uint32_t k2_raw_change_tick = 0;
 
-    /* 触摸屏初始化已禁�?�?软件 I2C 操作 PA8/PC9 + I2C3 干扰 LTDC 导致全黑 */
+    /* 触摸屏初始化已禁�?�?软件 I2C 操作 PA8/PC9 + I2C3 干扰 LTDC 导致全黑 */
     // Touch_Init();
 
     DrawStaticUI();
@@ -442,7 +456,7 @@ void GUI_Task(void *pvParameters)
             }
         }
 
-        /* KEY2 (PC13) �?请求 MPU6050 (短按 50ms 消抖) */
+        /* KEY2 (PC13) �?请求 MPU6050 (短按 50ms 消抖) */
         if (k2 != k2_last_raw) {
             k2_last_raw = k2;
             k2_raw_change_tick = now;
@@ -478,8 +492,15 @@ void GUI_Task(void *pvParameters)
             HistoryAdd(&msg);
         }
 
-        /* 触摸屏已禁用 �?�?GUI_Task 入口 */
-        /* if (Touch_Scan()) HandleTouch(Touch_GetX(), Touch_GetY()); */
+        /* 触摸屏已禁用 �?�?GUI_Task 入口 */
+        if (xSemaphoreTake(xTouchSemaphore, 0) == pdTRUE) {
+            GTP_TouchProcess();
+            TouchEvent_t ev;
+            while (xQueueReceive(xTouchQueue, &ev, 0) == pdTRUE) {
+                HandleTouch((uint16_t)ev.x, (uint16_t)ev.y);
+            }
+        }
+
 
         RefreshSensors();
         RefreshHistory();
@@ -490,7 +511,7 @@ void GUI_Task(void *pvParameters)
 }
 
 /* ========================================================================== */
-/*  LCD_TestTask �?测试模式: 绕过 RS485, 每秒�?GUI 队列喂虚拟传感器数据     */
+/*  LCD_TestTask �?测试模式: 绕过 RS485, 每秒�?GUI 队列喂虚拟传感器数据     */
 /*  用于在没有采集前端时, 验证 LCD 更新流程                                    */
 /* ========================================================================== */
 void LCD_TestTask(void *pvParameters)

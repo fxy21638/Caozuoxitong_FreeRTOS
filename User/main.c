@@ -144,8 +144,16 @@ static void LCD_PrintLine(uint16_t line, uint16_t fg, const char *fmt, ...)
 #if DEVICE_ROLE == ROLE_MANAGER
 
 #include "./gui/gui.h"
+#include "./touch/gt9xx.h"
+#include "semphr.h"
 
-static QueueHandle_t g_gui_queue = NULL;       /* ï¿½?GUI_Task                  */
+typedef struct { int32_t x; int32_t y; } TouchEvent_t;
+
+static QueueHandle_t g_gui_queue = NULL;
+
+/* ´¥ÃþÆÁ (lantian ¼Ü¹¹: ISR¡úÐÅºÅÁ¿¡úÈÎÎñ) */
+QueueHandle_t xTouchQueue     = NULL;
+QueueHandle_t xTouchSemaphore = NULL;       /* ï¿½?GUI_Task                  */
 
 /* -------------------------------------------------------------------------- */
 /*  RS485 æŽ¥æ”¶ä»»åŠ¡ (ä¼˜å…ˆï¿½?6)                                                   */
@@ -302,6 +310,15 @@ static void BSP_Init(void)
     LCD_SetTransparency(0xFF);
     LCD_Clear(LCD_COLOR_BLACK);
     RS485_Config();
+
+    /* lantian ´¥ÃþÆÁ³õÊ¼»¯ */
+    xTouchQueue     = xQueueCreate(10, sizeof(TouchEvent_t));
+    xTouchSemaphore = xSemaphoreCreateBinary();
+
+    if (GTP_Init_Panel() != 0)
+        printf("[Touch] init FAIL\r\n");
+    else
+        printf("[Touch] ready\r\n");
 }
 
 /* -------------------------------------------------------------------------- */
