@@ -29,7 +29,6 @@
 // 中断定义
 #define RS485_USART_IRQ             USART2_IRQn
 
-// 收发控制宏
 #define RS485_TX_EN()               GPIO_SetBits(RS485_RE_GPIO_PORT, RS485_RE_PIN)
 #define RS485_RX_EN()               GPIO_ResetBits(RS485_RE_GPIO_PORT, RS485_RE_PIN)
 

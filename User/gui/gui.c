@@ -1,9 +1,9 @@
 /* ========================================================================== */
-/*  gui.c — Manager LCD GUI (left-right card layout + blue-white theme)       */
+/*  gui.c �?Manager LCD GUI (left-right card layout + blue-white theme)       */
 /*                                                                             */
 /*  Layout: Title | DHT card (L) + MPU card (R) | History (L+R cols) | Status  */
 /*  Theme:  Blue-white, clean modern look                                       */
-/*  Input:  KEY1(PA0)→DHT  KEY2(PC13)→MPU  非阻塞消抖                           */
+/*  Input:  KEY1(PA0)→DHT  KEY2(PC13)→MPU  非阻塞消�?                          */
 /* ========================================================================== */
 
 #include "./gui.h"
@@ -20,13 +20,13 @@
 /*  Blue-White Theme Palette (ARGB1555)                                        */
 /*  ARGB1555: bit15 = 0=不透明, 1=透明                                         */
 /* ========================================================================== */
-#define COL_BLACK 0x0000   /* 不透明黑 (0x8000 = 透明黑, 不能用)              */
-#define COL_WHITE 0x7FFF   /* 不透明白                                       */
-#define COL_BLUE  0x001F   /* 不透明蓝 (bit15=0)                            */
+#define COL_BLACK 0x0000   /* 不透明�?(0x8000 = 透明�? 不能�?              */
+#define COL_WHITE 0x7FFF   /* 不透明�?                                      */
+#define COL_BLUE  0x001F   /* 不透明�?(bit15=0)                            */
 #define COL_LBLUE 0x1D1F   /* 不透明淡蓝                                     */
-#define COL_PALE  0x4EBF   /* 不透明淡色 (用于历史行交替)                    */
+#define COL_PALE  0x4EBF   /* 不透明淡色 (用于历史行交�?                    */
 #define COL_DIM   0x630C   /* 暗灰 (非透明)                                  */
-#define COL_DATA  0x001F   /* 数据色 = 蓝                                    */
+#define COL_DATA  0x001F   /* 数据�?= �?                                   */
 #define COL_GREEN 0x03E0   /* 绿色                                           */
 
 /* ========================================================================== */
@@ -57,6 +57,18 @@
 
 #define STAT_Y (HIST_BODY_Y + HIST_BODY_H)
 #define STAT_H 52
+
+/* ---- Touch buttons ---- */
+#define BTN_H     24
+#define BTN_DHT_X 72
+#define BTN_DHT_Y 224
+#define BTN_DHT_W 140
+#define BTN_MPU_X 488
+#define BTN_MPU_Y 224
+#define BTN_MPU_W 140
+
+#define KEY_DEBOUNCE_MS    40
+#define KEY_LONG_PRESS_MS  500
 
 /* ========================================================================== */
 /*  History entry                                                              */
@@ -124,6 +136,59 @@ static void Put(uint16_t x, uint16_t y, uint16_t fg, uint16_t bg, const char *s)
 }
 
 /* ========================================================================== */
+/*  Draw button (simple, avoids DMA2D overflow)                                  */
+/* ========================================================================== */
+static void DrawButton(int x, int y, int w, int h, uint16_t fill)
+{
+    LCD_SetTextColor(fill);
+    LCD_DrawFullRect(x, y, w, h);
+}
+
+/* ========================================================================== */
+/*  Draw touch buttons                                                          */
+/* ========================================================================== */
+static void DrawButtons(void)
+{
+    DrawButton(BTN_DHT_X, BTN_DHT_Y, BTN_DHT_W, BTN_H, COL_BLUE);
+    Put(BTN_DHT_X + 38, BTN_DHT_Y + 6, COL_WHITE, COL_BLUE, "REQ  DHT");
+    DrawButton(BTN_MPU_X, BTN_MPU_Y, BTN_MPU_W, BTN_H, COL_BLUE);
+    Put(BTN_MPU_X + 38, BTN_MPU_Y + 6, COL_WHITE, COL_BLUE, "REQ  MPU");
+}
+
+/* ========================================================================== */
+/*  Touch handler                                                               */
+/* ========================================================================== */
+static void HandleTouch(uint16_t x, uint16_t y)
+{
+    RS485TxRequest_t req;
+    if (x >= BTN_DHT_X && x < BTN_DHT_X + BTN_DHT_W &&
+        y >= BTN_DHT_Y && y < BTN_DHT_Y + BTN_H) {
+        printf("[TOUCH] DHT\n");
+        req.dest_addr = ADDR_COLLECTOR_1;
+        req.msg_type  = MSG_TYPE_TEMP_HUMI;
+        req.data_len  = 0;
+        xQueueSend(g_tx_queue, &req, 0);
+    } else if (x >= BTN_MPU_X && x < BTN_MPU_X + BTN_MPU_W &&
+               y >= BTN_MPU_Y && y < BTN_MPU_Y + BTN_H) {
+        printf("[TOUCH] MPU\n");
+        req.dest_addr = ADDR_COLLECTOR_2;
+        req.msg_type  = MSG_TYPE_MPU6050;
+        req.data_len = 0;
+        xQueueSend(g_tx_queue, &req, 0);
+    }
+}
+
+static void QueueSensorRequest(uint8_t dest_addr, uint8_t msg_type)
+{
+    RS485TxRequest_t req;
+
+    req.dest_addr = dest_addr;
+    req.msg_type  = msg_type;
+    req.data_len  = 0;
+    xQueueSend(g_tx_queue, &req, 0);
+}
+
+/* ========================================================================== */
 /*  Draw the static UI once at startup                                         */
 /* ========================================================================== */
 static void DrawStaticUI(void)
@@ -140,8 +205,8 @@ static void DrawStaticUI(void)
     FillR(DIV_X, BODY_Y, DIV_W, BODY_H, COL_BLUE);
 
     /* Left card labels */
-    Put(L_X + LBL_X, 80, COL_BLACK, COL_LBLUE, "Temperature :");
-    Put(L_X + LBL_X, 108, COL_BLACK, COL_LBLUE, "Humidity    :");
+    Put(L_X + LBL_X, 80, COL_BLACK, COL_LBLUE, "Temp (C) :");
+    Put(L_X + LBL_X, 108, COL_BLACK, COL_LBLUE, "Humi (%) :");
     Put(L_X + LBL_X, 136, COL_BLACK, COL_LBLUE, "Status      :");
     Put(L_X + LBL_X, 164, COL_BLACK, COL_LBLUE, "Updated     :");
 
@@ -153,20 +218,21 @@ static void DrawStaticUI(void)
     Put(R_X + LBL_X, 192, COL_BLACK, COL_LBLUE, "Updated     :");
 
     /* Placeholder values */
-    Put(L_X + VAL_X, 80, COL_DIM, COL_LBLUE, "---.-C ");
-    Put(L_X + VAL_X, 108, COL_DIM, COL_LBLUE, "---.-% ");
+    Put(L_X + VAL_X, 80, COL_DIM, COL_LBLUE, "---.-");
+    Put(L_X + VAL_X, 108, COL_DIM, COL_LBLUE, "---.-");
     Put(L_X + VAL_X, 136, COL_DIM, COL_LBLUE, "Wait...");
     Put(L_X + VAL_X, 164, COL_DIM, COL_LBLUE, "--     ");
 
-    Put(R_X + VAL_X, 80, COL_DIM, COL_LBLUE, "---.-  ");
-    Put(R_X + VAL_X, 108, COL_DIM, COL_LBLUE, "---.-  ");
-    Put(R_X + VAL_X, 136, COL_DIM, COL_LBLUE, "---.-  ");
+    Put(R_X + VAL_X, 80, COL_DIM, COL_LBLUE, "---.-");
+    Put(R_X + VAL_X, 108, COL_DIM, COL_LBLUE, "---.-");
+    Put(R_X + VAL_X, 136, COL_DIM, COL_LBLUE, "---.-");
     Put(R_X + VAL_X, 164, COL_DIM, COL_LBLUE, "Wait...");
     Put(R_X + VAL_X, 192, COL_DIM, COL_LBLUE, "--     ");
 
-    /* Key hints — show which key does what */
-    Put(L_X, BODY_END - 14, COL_BLUE, COL_LBLUE, "KEY1: REQ DHT");
-    Put(R_X, BODY_END - 14, COL_BLUE, COL_LBLUE, "KEY2: REQ MPU");
+    /* (按键提示已删�? */
+
+    /* Touch buttons */
+    DrawButtons();
 
     /* History section */
     FillR(0, HIST_HDR_Y, LCD_PIXEL_WIDTH, HIST_HDR_H, COL_BLUE);
@@ -177,7 +243,7 @@ static void DrawStaticUI(void)
     /* Status bar */
     FillR(0, STAT_Y, LCD_PIXEL_WIDTH, STAT_H, COL_BLUE);
     Put(12, STAT_Y + 12, COL_WHITE, COL_BLUE,
-        "Updates: 0  |  DHT: --   MPU: --   |  KEY1/KEY2");
+        "Updates: 0  |  DHT: --   MPU: --");
 }
 
 /* ========================================================================== */
@@ -193,43 +259,43 @@ static void RefreshSensors(void)
     {
         age = (now - g_dht_tick) * portTICK_PERIOD_MS / 1000;
         fg = COL_DATA;
-        snprintf(g_buf, sizeof(g_buf), "%5.1fC ", g_dht_temp);
+        snprintf(g_buf, sizeof(g_buf), "%.1f", g_dht_temp);
         Put(L_X + VAL_X, 80, fg, COL_LBLUE, g_buf);
-        snprintf(g_buf, sizeof(g_buf), "%5.1f%% ", g_dht_humi);
+        snprintf(g_buf, sizeof(g_buf), "%.1f", g_dht_humi);
         Put(L_X + VAL_X, 108, fg, COL_LBLUE, g_buf);
-        Put(L_X + VAL_X, 136, COL_GREEN, COL_LBLUE, "Online ");
-        snprintf(g_buf, sizeof(g_buf), "%lus     ", age);
+        Put(L_X + VAL_X, 136, COL_GREEN, COL_LBLUE, "Online");
+        snprintf(g_buf, sizeof(g_buf), "%lus", age);
         Put(L_X + VAL_X, 164, fg, COL_LBLUE, g_buf);
     }
     else
     {
-        Put(L_X + VAL_X, 80, COL_DIM, COL_LBLUE, "---.-C ");
-        Put(L_X + VAL_X, 108, COL_DIM, COL_LBLUE, "---.-% ");
-        Put(L_X + VAL_X, 136, COL_DIM, COL_LBLUE, "Wait...");
-        Put(L_X + VAL_X, 164, COL_DIM, COL_LBLUE, "--     ");
+        Put(L_X + VAL_X, 80, COL_DIM, COL_LBLUE, "---");
+        Put(L_X + VAL_X, 108, COL_DIM, COL_LBLUE, "---");
+        Put(L_X + VAL_X, 136, COL_DIM, COL_LBLUE, "--");
+        Put(L_X + VAL_X, 164, COL_DIM, COL_LBLUE, "--");
     }
 
     if (g_mpu_valid)
     {
         age = (now - g_mpu_tick) * portTICK_PERIOD_MS / 1000;
         fg = COL_DATA;
-        snprintf(g_buf, sizeof(g_buf), "%6.1f  ", g_mpu_pitch);
+        snprintf(g_buf, sizeof(g_buf), "%.1f", g_mpu_pitch);
         Put(R_X + VAL_X, 80, fg, COL_LBLUE, g_buf);
-        snprintf(g_buf, sizeof(g_buf), "%6.1f  ", g_mpu_roll);
+        snprintf(g_buf, sizeof(g_buf), "%.1f", g_mpu_roll);
         Put(R_X + VAL_X, 108, fg, COL_LBLUE, g_buf);
-        snprintf(g_buf, sizeof(g_buf), "%6.1f  ", g_mpu_yaw);
+        snprintf(g_buf, sizeof(g_buf), "%.1f", g_mpu_yaw);
         Put(R_X + VAL_X, 136, fg, COL_LBLUE, g_buf);
-        Put(R_X + VAL_X, 164, COL_GREEN, COL_LBLUE, "Online ");
-        snprintf(g_buf, sizeof(g_buf), "%lus     ", age);
+        Put(R_X + VAL_X, 164, COL_GREEN, COL_LBLUE, "Online");
+        snprintf(g_buf, sizeof(g_buf), "%lus", age);
         Put(R_X + VAL_X, 192, fg, COL_LBLUE, g_buf);
     }
     else
     {
-        Put(R_X + VAL_X, 80, COL_DIM, COL_LBLUE, "---.-  ");
-        Put(R_X + VAL_X, 108, COL_DIM, COL_LBLUE, "---.-  ");
-        Put(R_X + VAL_X, 136, COL_DIM, COL_LBLUE, "---.-  ");
-        Put(R_X + VAL_X, 164, COL_DIM, COL_LBLUE, "Wait...");
-        Put(R_X + VAL_X, 192, COL_DIM, COL_LBLUE, "--     ");
+        Put(R_X + VAL_X, 80, COL_DIM, COL_LBLUE, "---");
+        Put(R_X + VAL_X, 108, COL_DIM, COL_LBLUE, "---");
+        Put(R_X + VAL_X, 136, COL_DIM, COL_LBLUE, "---");
+        Put(R_X + VAL_X, 164, COL_DIM, COL_LBLUE, "--");
+        Put(R_X + VAL_X, 192, COL_DIM, COL_LBLUE, "--");
     }
 
     FillR(DIV_X, BODY_Y, DIV_W, BODY_H, COL_BLUE);
@@ -299,7 +365,7 @@ static void RefreshHistory(void)
 static void RefreshStatusBar(void)
 {
     snprintf(g_buf, sizeof(g_buf),
-             "Updates:%-4lu | DHT:%-3s  MPU:%-3s | KEY1/KEY2",
+             "Updates:%-4lu | DHT:%-3s  MPU:%-3s",
              g_update_count,
              g_dht_valid ? "OK" : "--",
              g_mpu_valid ? "OK" : "--");
@@ -325,10 +391,10 @@ static void HistoryAdd(const GUIMsg_t *msg)
 }
 
 /* ========================================================================== */
-/*  GUI Task — 非阻塞按键 + 传感器显示 + 历史记录                                */
+/*  GUI Task �?非阻塞按�?+ 传感器显�?+ 历史记录                                */
 /*                                                                             */
-/*  按键检测: 每 20ms 读一次 GPIO, 下降沿 (1→0) 触发, 无阻塞                    */
-/*  KEY1(PA0) → 请求 DHT    KEY2(PC13) → 请求 MPU                              */
+/*  按键检�? �?20ms 读一�?GPIO, 下降�?(1�?) 触发, 无阻�?                   */
+/*  KEY1(PA0) �?请求 DHT    KEY2(PC13) �?请求 MPU                              */
 /* ========================================================================== */
 void GUI_Task(void *pvParameters)
 {
@@ -337,40 +403,58 @@ void GUI_Task(void *pvParameters)
 
     LCD_SetLayer(LCD_FOREGROUND_LAYER);
     LCD_Clear(COL_BLACK);
-    DrawStaticUI();
 
-    /* 按键消抖: 上次电平 (1=按下, 0=未按, 适配野火 KEY_ON=1) */
-    uint8_t k1_last = GPIO_ReadInputDataBit(KEY1_GPIO_PORT, KEY1_PIN);
-    uint8_t k2_last = GPIO_ReadInputDataBit(KEY2_GPIO_PORT, KEY2_PIN);
+    /* 按键消抖: KEY1=PA0 短按DHT/长按MPU, KEY2=PC13 仅诊�?*/
+    /* KEY1: short press DHT, long press MPU. Active level follows KEY_ON. */
+    uint8_t  k1_raw = GPIO_ReadInputDataBit(KEY1_GPIO_PORT, KEY1_PIN);
+    uint8_t  k1_last_raw = k1_raw;
+    uint8_t  k1_stable = k1_raw;
+    uint32_t k1_raw_change_tick = 0;
+
+    uint8_t  k2_raw = GPIO_ReadInputDataBit(KEY2_GPIO_PORT, KEY2_PIN);
+    uint8_t  k2_last_raw = k2_raw;
+    uint8_t  k2_stable = k2_raw;
+    uint32_t k2_raw_change_tick = 0;
+
+    /* 触摸屏初始化已禁�?�?软件 I2C 操作 PA8/PC9 + I2C3 干扰 LTDC 导致全黑 */
+    // Touch_Init();
+
+    DrawStaticUI();
 
     while (1)
     {
+        TickType_t now = xTaskGetTickCount();
         uint8_t k1 = GPIO_ReadInputDataBit(KEY1_GPIO_PORT, KEY1_PIN);
         uint8_t k2 = GPIO_ReadInputDataBit(KEY2_GPIO_PORT, KEY2_PIN);
 
-        /* KEY1 上升沿 (0→1 = 按下) — 野火 KEY_ON=1, 高电平按下 */
-        if (k1 == 1 && k1_last == 0)
-        {
-            RS485TxRequest_t req;
-            printf("[KEY] KEY1 pressed -> request DHT\n");
-            req.dest_addr = ADDR_COLLECTOR_1;
-            req.msg_type = MSG_TYPE_TEMP_HUMI;
-            req.data_len = 0;
-            xQueueSend(g_tx_queue, &req, 0);
+        if (k1 != k1_last_raw) {
+            k1_last_raw = k1;
+            k1_raw_change_tick = now;
         }
-        k1_last = k1;
 
-        /* KEY2 上升沿 */
-        if (k2 == 1 && k2_last == 0)
-        {
-            RS485TxRequest_t req;
-            printf("[KEY] KEY2 pressed -> request MPU\n");
-            req.dest_addr = ADDR_COLLECTOR_2;
-            req.msg_type = MSG_TYPE_MPU6050;
-            req.data_len = 0;
-            xQueueSend(g_tx_queue, &req, 0);
+        if ((k1 != k1_stable) &&
+            ((now - k1_raw_change_tick) >= pdMS_TO_TICKS(KEY_DEBOUNCE_MS))) {
+            k1_stable = k1;
+            if (k1_stable == KEY_ON) {
+                /* KEY1 press -> DHT */
+                printf("[KEY] KEY1 pressed -> request DHT\n");
+                QueueSensorRequest(ADDR_COLLECTOR_1, MSG_TYPE_TEMP_HUMI);
+            }
         }
-        k2_last = k2;
+
+        /* KEY2 (PC13) �?请求 MPU6050 (短按 50ms 消抖) */
+        if (k2 != k2_last_raw) {
+            k2_last_raw = k2;
+            k2_raw_change_tick = now;
+        }
+        if ((k2 != k2_stable) &&
+            ((now - k2_raw_change_tick) >= pdMS_TO_TICKS(KEY_DEBOUNCE_MS))) {
+            k2_stable = k2;
+            if (k2_stable == KEY_ON) {
+                printf("[KEY] KEY2 pressed -> request MPU\n");
+                QueueSensorRequest(ADDR_COLLECTOR_2, MSG_TYPE_MPU6050);
+            }
+        }
 
         /* 非阻塞排空传感器数据队列 */
         while (xQueueReceive(g_gui_queue, &msg, 0) == pdPASS)
@@ -394,6 +478,9 @@ void GUI_Task(void *pvParameters)
             HistoryAdd(&msg);
         }
 
+        /* 触摸屏已禁用 �?�?GUI_Task 入口 */
+        /* if (Touch_Scan()) HandleTouch(Touch_GetX(), Touch_GetY()); */
+
         RefreshSensors();
         RefreshHistory();
         RefreshStatusBar();
@@ -403,7 +490,7 @@ void GUI_Task(void *pvParameters)
 }
 
 /* ========================================================================== */
-/*  LCD_TestTask — 测试模式: 绕过 RS485, 每秒向 GUI 队列喂虚拟传感器数据     */
+/*  LCD_TestTask �?测试模式: 绕过 RS485, 每秒�?GUI 队列喂虚拟传感器数据     */
 /*  用于在没有采集前端时, 验证 LCD 更新流程                                    */
 /* ========================================================================== */
 void LCD_TestTask(void *pvParameters)

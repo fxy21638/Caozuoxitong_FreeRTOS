@@ -178,7 +178,7 @@ uint8_t Protocol_FeedByte(ProtocolParser_t *parser, uint8_t byte)
         if (byte == expected_crc) {
             parser->state = STATE_WAIT_TAIL;
         } else {
-            parser->state = STATE_WAIT_HEADER;   /* CRC 校验失败，丢弃整帧 */
+            parser->state = STATE_WAIT_HEADER; parser->byte_count = 0; /* CRC 校验失败，丢弃整帧 */
         }
         break;
     }

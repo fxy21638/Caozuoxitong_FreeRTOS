@@ -42,7 +42,7 @@ void Key_GPIO_Config(void)
 	GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN; 
   
   /*设置引脚不上拉也不下拉*/
-  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_NOPULL;
+  GPIO_InitStructure.GPIO_PuPd = GPIO_PuPd_UP;
 	
   /*使用上面的结构体初始化按键*/
 	GPIO_Init(KEY1_GPIO_PORT, &GPIO_InitStructure);  

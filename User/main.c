@@ -1,9 +1,9 @@
 /* ========================================================================== */
-/*  main.c — 物联网总线通信系统                                                  */
+/*  main.c �?物联网总线通信系统                                                  */
 /*                                                                             */
 /*  ROLE_MANAGER    (0x01): LCD+触摸 GUI, 10s 轮询两个采集前端, LED 控制        */
-/*  ROLE_COLLECTOR_1(0x02): DHT 温湿度采集, RS485 查询响应, LCD 显示            */
-/*  ROLE_COLLECTOR_2(0x03): MPU6050 姿态采集, RS485 查询响应, LCD 显示          */
+/*  ROLE_COLLECTOR_1(0x02): DHT 温湿度采�? RS485 查询响应, LCD 显示            */
+/*  ROLE_COLLECTOR_2(0x03): MPU6050 姿态采�? RS485 查询响应, LCD 显示          */
 /* ========================================================================== */
 
 #include "FreeRTOS.h"
@@ -23,15 +23,15 @@
 #include <stdio.h>
 
 /* ========================================================================== */
-/*  公共句柄 (所有角色共享)                                                      */
+/*  公共句柄 (所有角色共�?                                                      */
 /* ========================================================================== */
-TaskHandle_t  RS485RxTask_Handle   = NULL;    /* ISR 需要引用                  */
-TimerHandle_t FrameTimeout_Handle  = NULL;    /* ISR 需要引用                  */
-static ProtocolParser_t g_parser;             /* 协议解析器实例                */
+TaskHandle_t  RS485RxTask_Handle   = NULL;    /* ISR 需要引�?                 */
+TimerHandle_t FrameTimeout_Handle  = NULL;    /* ISR 需要引�?                 */
+static ProtocolParser_t g_parser;             /* 协议解析器实�?               */
 
 /* ========================================================================== */
-/*  栈溢出钩子 — configCHECK_FOR_STACK_OVERFLOW=2 需要                          */
-/*  任务栈溢出时立即打印任务名, 防止静默死锁                                    */
+/*  栈溢出钩�?�?configCHECK_FOR_STACK_OVERFLOW=2 需�?                         */
+/*  任务栈溢出时立即打印任务�? 防止静默死锁                                    */
 /* ========================================================================== */
 void vApplicationStackOverflowHook(TaskHandle_t xTask, char *pcTaskName)
 {
@@ -50,12 +50,13 @@ void vApplicationMallocFailedHook(void)
     for (;;) {}
 }
 
-/* 任务通知位 */
-#define NOTIFY_RX_BYTE      (1UL << 0)        /* ISR: 收到新字节               */
-#define NOTIFY_FRAME_TO      (1UL << 1)        /* 定时器: 帧间超时              */
+/* 任务通知�?*/
+#define RS485_TURNAROUND_DELAY_MS  5
+#define NOTIFY_RX_BYTE      (1UL << 0)        /* ISR: 收到新字�?              */
+#define NOTIFY_FRAME_TO      (1UL << 1)        /* 定时�? 帧间超时              */
 
 /* ========================================================================== */
-/*  TX 请求结构体 (所有角色共用)                                                  */
+/*  TX 请求结构�?(所有角色共�?                                                  */
 /* ========================================================================== */
 typedef struct {
     uint8_t dest_addr;                         /* 目标地址                     */
@@ -66,15 +67,15 @@ typedef struct {
 
 /* ---- TX 队列 ---- */
 #if DEVICE_ROLE == ROLE_MANAGER
-/* 管理端: g_tx_queue 非 static — gui.c 通过 extern 引用发送触摸按钮请求      */
+/* 管理�? g_tx_queue �?static �?gui.c 通过 extern 引用发送触摸按钮请�?     */
 QueueHandle_t g_tx_queue = NULL;
 #else
-/* 采集前端: 仅 main.c 内部使用                                              */
+/* 采集前端: �?main.c 内部使用                                              */
 static QueueHandle_t g_tx_queue = NULL;
 #endif
 
 /* ========================================================================== */
-/*  100ms 帧超时回调: 通知 RS485RxTask 复位不完整帧                             */
+/*  100ms 帧超时回�? 通知 RS485RxTask 复位不完整帧                             */
 /* ========================================================================== */
 static void FrameTimeoutCallback(TimerHandle_t xTimer)
 {
@@ -85,9 +86,9 @@ static void FrameTimeoutCallback(TimerHandle_t xTimer)
 }
 
 /* ========================================================================== */
-/*  RS485 发送任务 (优先级 5) — 所有角色共用                                     */
+/*  RS485 发送任�?(优先�?5) �?所有角色共�?                                    */
 /*                                                                            */
-/*  等待 TX 队列 → 组帧 (含 CRC) → 拉高 DE → 发送 → 等待 TC → 拉低 DE          */
+/*  等待 TX 队列 �?组帧 (�?CRC) �?拉高 DE �?发�?�?等待 TC �?拉低 DE          */
 /* ========================================================================== */
 static void RS485TxTask(void *pvParameters)
 {
@@ -98,6 +99,11 @@ static void RS485TxTask(void *pvParameters)
 
     while (1) {
         if (xQueueReceive(g_tx_queue, &req, portMAX_DELAY) == pdPASS) {
+
+#if DEVICE_ROLE != ROLE_MANAGER
+            /* Allow the manager and USB-485 dongle to switch back to receive mode. */
+            vTaskDelay(pdMS_TO_TICKS(RS485_TURNAROUND_DELAY_MS));
+#endif
             if (req.data_len > 0) {
                 frame_len = Protocol_BuildResponse(tx_buf, req.dest_addr,
                                                    req.msg_type, req.data, req.data_len);
@@ -115,7 +121,7 @@ static void RS485TxTask(void *pvParameters)
 }
 
 /* ========================================================================== */
-/*  LCD 简单显示 (采集前端用)                                                    */
+/*  LCD 简单显�?(采集前端�?                                                    */
 /* ========================================================================== */
 #if DEVICE_ROLE != ROLE_MANAGER
 static char lcd_buf[64];
@@ -133,17 +139,16 @@ static void LCD_PrintLine(uint16_t line, uint16_t fg, const char *fmt, ...)
 #endif
 
 /* ========================================================================== */
-/*  ROLE_MANAGER — 管理端 (地址 0x01)                                          */
+/*  ROLE_MANAGER �?管理�?(地址 0x01)                                          */
 /* ========================================================================== */
 #if DEVICE_ROLE == ROLE_MANAGER
 
 #include "./gui/gui.h"
 
-static QueueHandle_t g_gui_queue = NULL;       /* → GUI_Task                  */
-static volatile uint8_t g_response_ok;         /* PollTask 应答同步标志        */
+static QueueHandle_t g_gui_queue = NULL;       /* �?GUI_Task                  */
 
 /* -------------------------------------------------------------------------- */
-/*  RS485 接收任务 (优先级 6)                                                   */
+/*  RS485 接收任务 (优先�?6)                                                   */
 /* -------------------------------------------------------------------------- */
 static void RS485RxTask(void *pvParameters)
 {
@@ -152,11 +157,16 @@ static void RS485RxTask(void *pvParameters)
     uint8_t  byte;
 
     Protocol_Init(&g_parser, DEVICE_ADDR, 1);   /* is_manager = 1             */
+    extern volatile uint32_t g_rs485_rx_overflow;
+    uint32_t dbg_wake=0;
 
     while (1) {
         xTaskNotifyWait(0, 0xFFFFFFFF, &notified, portMAX_DELAY);
+        dbg_wake++;
 
+        uint32_t rd=0;
         while (RS485_RingRead(&byte)) {
+            rd++;
             if (Protocol_FeedByte(&g_parser, byte)) {
                 const ProtocolFrame_t *f = &g_parser.frame;
                 GUIMsg_t gui_msg;
@@ -175,7 +185,6 @@ static void RS485RxTask(void *pvParameters)
 
                         printf("[RX] DHT  temp=%.1f C  humi=%.1f %%\n", temp, humi);
                     }
-                    g_response_ok = 1;
                     LED2_TOGGLE;
                     break;
 
@@ -194,7 +203,6 @@ static void RS485RxTask(void *pvParameters)
 
                         printf("[RX] MPU  pitch=%.1f roll=%.1f yaw=%.1f\n", pitch, roll, yaw);
                     }
-                    g_response_ok = 1;
                     LED2_TOGGLE;
                     break;
 
@@ -219,6 +227,9 @@ static void RS485RxTask(void *pvParameters)
             }
         }
 
+        if (dbg_wake % 50 == 0)
+            printf("[RX-DBG] wake=%lu rd=%lu ovf=%lu\n", dbg_wake, rd, g_rs485_rx_overflow);
+
         if (notified & NOTIFY_FRAME_TO) {
             Protocol_Reset(&g_parser);
         }
@@ -227,7 +238,7 @@ static void RS485RxTask(void *pvParameters)
 
 #if 0  /* ---- PollTask 已禁用：改为 KEY1/KEY2 手动触发 (GUI_Task 处理) ---- */
 /* -------------------------------------------------------------------------- */
-/*  轮询任务 (优先级 4)                                                         */
+/*  轮询任务 (优先�?4)                                                         */
 /* -------------------------------------------------------------------------- */
 static void PollTask(void *pvParameters)
 {
@@ -271,7 +282,7 @@ static void PollTask(void *pvParameters)
 #endif  /* PollTask disabled */
 
 /* -------------------------------------------------------------------------- */
-/*  BSP 初始化 (管理端)                                                         */
+/*  BSP 初始�?(管理�?                                                         */
 /* -------------------------------------------------------------------------- */
 static void BSP_Init(void)
 {
@@ -279,7 +290,7 @@ static void BSP_Init(void)
     LED_GPIO_Config();
     Debug_USART_Config();
 
-    /* KEY1(PA0)/KEY2(PC13) GPIO 初始化 (输入模式 + 外部上拉) */
+    /* KEY1(PA0)/KEY2(PC13) GPIO 初始�?(输入模式 + 外部上拉) */
     Key_GPIO_Config();
 
     LCD_Init();
@@ -294,7 +305,7 @@ static void BSP_Init(void)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  主入口 (管理端)                                                             */
+/*  主入�?(管理�?                                                             */
 /* -------------------------------------------------------------------------- */
 int main(void)
 {
@@ -307,12 +318,12 @@ int main(void)
     FrameTimeout_Handle = xTimerCreate("FrameTO",
         pdMS_TO_TICKS(FRAME_TIMEOUT_MS), pdFALSE, (void *)0, FrameTimeoutCallback);
 
-    g_tx_queue   = xQueueCreate(8,  sizeof(RS485TxRequest_t));
-    g_gui_queue  = xQueueCreate(8,  sizeof(GUIMsg_t));
+    g_tx_queue   = xQueueCreate(16, sizeof(RS485TxRequest_t));
+    g_gui_queue  = xQueueCreate(16, sizeof(GUIMsg_t));
 
     xTaskCreate(RS485RxTask, "RS485Rx", 512, NULL, 6, &RS485RxTask_Handle);
     xTaskCreate(RS485TxTask, "RS485Tx", 256, NULL, 5, NULL);
-    /* PollTask 已禁用 — 改为 KEY1/KEY2 手动触发 (GUI_Task 内处理按键) */
+    /* PollTask 已禁�?�?改为 KEY1/KEY2 手动触发 (GUI_Task 内处理按�? */
     xTaskCreate(GUI_Task,    "GUI",    4096, (void *)g_gui_queue, 3, NULL);
 
     printf("Scheduler start...\n\n");
@@ -322,7 +333,7 @@ int main(void)
 }
 
 /* ========================================================================== */
-/*  ROLE_COLLECTOR_1 — 采集前端1 (地址 0x02, DHT 温湿度)                        */
+/*  ROLE_COLLECTOR_1 �?采集前端1 (地址 0x02, DHT 温湿�?                        */
 /* ========================================================================== */
 #elif DEVICE_ROLE == ROLE_COLLECTOR_1
 
@@ -337,7 +348,7 @@ static uint8_t       g_led_state = 0;
 
 /* -------------------------------------------------------------------------- */
 /*  RS485 接收任务                                                              */
-/*  接收管理端查询 (MSG_TYPE_TEMP_HUMI) 和 LED 控制 (MSG_TYPE_LED_CTRL)         */
+/*  接收管理端查�?(MSG_TYPE_TEMP_HUMI) �?LED 控制 (MSG_TYPE_LED_CTRL)         */
 /* -------------------------------------------------------------------------- */
 static void RS485RxTask(void *pvParameters)
 {
@@ -358,7 +369,7 @@ static void RS485RxTask(void *pvParameters)
                 switch (f->type) {
 
                 case MSG_TYPE_TEMP_HUMI:
-                    /* 管理端请求温湿度 → 应答最新数据 */
+                    /* 管理端请求温湿度 �?应答最新数�?*/
                     if (g_sensor_valid) {
                         int16_t t_raw = (int16_t)(g_temp * 10.0f);
                         int16_t h_raw = (int16_t)(g_humi * 10.0f);
@@ -383,7 +394,7 @@ static void RS485RxTask(void *pvParameters)
                         g_led_state = f->data[0] ? 1 : 0;
                         if (g_led_state) LED1_ON; else LED1_OFF;
 
-                        /* 应答 LED 状态 */
+                        /* 应答 LED 状�?*/
                         tx_req.dest_addr = ADDR_MANAGER;
                         tx_req.msg_type  = MSG_TYPE_LED_CTRL;
                         tx_req.data[0]   = g_led_state;
@@ -408,7 +419,7 @@ static void RS485RxTask(void *pvParameters)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  传感器采集任务 (优先级 4)                                                    */
+/*  传感器采集任�?(优先�?4)                                                    */
 /* -------------------------------------------------------------------------- */
 static void SensorTask(void *pvParameters)
 {
@@ -451,7 +462,7 @@ static void SensorTask(void *pvParameters)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  GUI 任务 (简单 LCD 行显示)                                                  */
+/*  GUI 任务 (简�?LCD 行显�?                                                  */
 /* -------------------------------------------------------------------------- */
 static void GUITask(void *pvParameters)
 {
@@ -484,7 +495,7 @@ static void GUITask(void *pvParameters)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  BSP 初始化                                                                 */
+/*  BSP 初始�?                                                                */
 /* -------------------------------------------------------------------------- */
 static void BSP_Init(void)
 {
@@ -492,7 +503,7 @@ static void BSP_Init(void)
     LED_GPIO_Config();
     Debug_USART_Config();
 
-    /* KEY1(PA0)/KEY2(PC13) GPIO 初始化 (输入模式 + 外部上拉) */
+    /* KEY1(PA0)/KEY2(PC13) GPIO 初始�?(输入模式 + 外部上拉) */
     Key_GPIO_Config();
 
     LCD_Init();
@@ -507,7 +518,7 @@ static void BSP_Init(void)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  主入口 (采集前端1)                                                           */
+/*  主入�?(采集前端1)                                                           */
 /* -------------------------------------------------------------------------- */
 int main(void)
 {
@@ -534,7 +545,7 @@ int main(void)
 }
 
 /* ========================================================================== */
-/*  ROLE_COLLECTOR_2 — 采集前端2 (地址 0x03, MPU6050 姿态)                      */
+/*  ROLE_COLLECTOR_2 �?采集前端2 (地址 0x03, MPU6050 姿�?                      */
 /* ========================================================================== */
 #elif DEVICE_ROLE == ROLE_COLLECTOR_2
 
@@ -548,7 +559,7 @@ static uint8_t       g_sensor_valid = 0;
 
 /* -------------------------------------------------------------------------- */
 /*  RS485 接收任务                                                              */
-/*  接收管理端查询 (MSG_TYPE_MPU6050)，应答最新姿态角                            */
+/*  接收管理端查�?(MSG_TYPE_MPU6050)，应答最新姿态角                            */
 /* -------------------------------------------------------------------------- */
 static void RS485RxTask(void *pvParameters)
 {
@@ -594,7 +605,7 @@ static void RS485RxTask(void *pvParameters)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  传感器采集任务 (优先级 4)                                                    */
+/*  传感器采集任�?(优先�?4)                                                    */
 /* -------------------------------------------------------------------------- */
 static void SensorTask(void *pvParameters)
 {
@@ -606,7 +617,7 @@ static void SensorTask(void *pvParameters)
     vTaskDelay(pdMS_TO_TICKS(500));
     if (!MPU6050_DMP_Init()) {
         printf("[C2] MPU6050 DMP init FAIL!\n");
-        vTaskSuspend(NULL);                    /* DMP 初始化失败, 挂起自己     */
+        vTaskSuspend(NULL);                    /* DMP 初始化失�? 挂起自己     */
     }
     printf("[C2] MPU6050 DMP init OK\n");
 
@@ -644,7 +655,7 @@ static void SensorTask(void *pvParameters)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  GUI 任务 (简单 LCD 行显示)                                                  */
+/*  GUI 任务 (简�?LCD 行显�?                                                  */
 /* -------------------------------------------------------------------------- */
 static void GUITask(void *pvParameters)
 {
@@ -677,7 +688,7 @@ static void GUITask(void *pvParameters)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  BSP 初始化                                                                 */
+/*  BSP 初始�?                                                                */
 /* -------------------------------------------------------------------------- */
 static void BSP_Init(void)
 {
@@ -685,7 +696,7 @@ static void BSP_Init(void)
     LED_GPIO_Config();
     Debug_USART_Config();
 
-    /* KEY1(PA0)/KEY2(PC13) GPIO 初始化 (输入模式 + 外部上拉) */
+    /* KEY1(PA0)/KEY2(PC13) GPIO 初始�?(输入模式 + 外部上拉) */
     Key_GPIO_Config();
 
     LCD_Init();
@@ -700,7 +711,7 @@ static void BSP_Init(void)
 }
 
 /* -------------------------------------------------------------------------- */
-/*  主入口 (采集前端2)                                                           */
+/*  主入�?(采集前端2)                                                           */
 /* -------------------------------------------------------------------------- */
 int main(void)
 {
@@ -727,7 +738,7 @@ int main(void)
 }
 
 /* ========================================================================== */
-/*  未知角色 — 编译错误                                                          */
+/*  未知角色 �?编译错误                                                          */
 /* ========================================================================== */
 #else
 #error "DEVICE_ROLE must be ROLE_MANAGER, ROLE_COLLECTOR_1, or ROLE_COLLECTOR_2"

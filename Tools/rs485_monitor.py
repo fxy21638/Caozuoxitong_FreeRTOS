@@ -24,9 +24,9 @@ except ImportError: print("pip install PyQt5"); sys.exit(1)
 # =====================================================
 FRAME_HEAD,FRAME_TAIL = 0xAA,0x55
 MSG_META = {
-    0x01:("温湿度 DHT","🌡️","#2563EB"),
-    0x02:("姿态角 MPU","📐","#059669"),
-    0x03:("LED 控制","💡","#D97706"),
+    0x01:("温湿度 DHT","[DHT]","#2563EB"),
+    0x02:("姿态角 MPU","[MPU]","#059669"),
+    0x03:("LED 控制","[LED]","#D97706"),
 }
 ADDR_NAME = {0x01:"管理端",0x02:"前端1(DHT)",0x03:"前端2(MPU)"}
 CRC8_TABLE=[
@@ -54,7 +54,7 @@ def parse_frame(buf:bytes):
         return False,{"raw":buf.hex(" "),"err":"帧头/尾错误"}
     addr=buf[1];length=buf[2];typ=buf[3];payload=buf[4:4+length-1]
     crc_byte=buf[4+length-1];expected=crc8(buf[:4+length-1])
-    name,icon,color=MSG_META.get(typ,("未知","❓","#6B7280"))
+    name,icon,color=MSG_META.get(typ,("未知","[?]","#6B7280"))
     return (crc_byte==expected),{
         "addr":f"0x{addr:02X}","addr_name":ADDR_NAME.get(addr,"?"),
         "type":f"0x{typ:02X}","type_name":name,"type_icon":icon,"type_color":color,
@@ -72,6 +72,8 @@ class SerialReader:
     def __init__(self,port,baud,cb):
         self.port=port;self.baudrate=baud;self.on_frame=cb
         self.ser=None;self.thr=None;self.running=False
+        self.rx_queue=[]  # thread-safe
+        self._lock=threading.Lock()
     def start(self):
         try:self.ser=serial.Serial(self.port,self.baudrate,timeout=0.05)
         except:return False
@@ -80,19 +82,37 @@ class SerialReader:
         return True
     def stop(self):
         self.running=False
+        self.rx_queue=[]  # thread-safe
+        self._lock=threading.Lock()
+        # 先设 running=False 让读线程退出
+        if self.thr and self.thr.is_alive():
+            self.thr.join(timeout=2)
         if self.ser:
-            try:self.ser.close()
-            except:pass
-        if self.thr:self.thr.join(timeout=1)
+            try:
+                if self.ser.is_open:
+                    self.ser.close()
+            except Exception:
+                pass
+        self.ser=None
+        self.thr=None
+    def drain(self):
+        with self._lock:
+            frames,self.rx_queue=self.rx_queue,[]
+        return frames
+
     def _loop(self):
         st="WAIT_HEAD";buf=bytearray();exp=0;got=0
         while self.running:
             try:
+                if not self.ser or not self.ser.is_open:
+                    break
                 d=self.ser.read(1)
                 if not d:continue
                 b=d[0]
                 if st=="WAIT_HEAD":
-                    if b==FRAME_HEAD:buf=bytearray([b]);st="WAIT_LEN"
+                    if b==FRAME_HEAD:buf=bytearray([b]);st="WAIT_ADDR"
+                elif st=="WAIT_ADDR":
+                    buf.append(b);st="WAIT_LEN"
                 elif st=="WAIT_LEN":
                     buf.append(b)
                     if 1<=b<=32:exp=b;got=0;st="WAIT_DATA"
@@ -104,9 +124,14 @@ class SerialReader:
                     buf.append(b);st="WAIT_TAIL"
                 elif st=="WAIT_TAIL":
                     buf.append(b)
-                    if b==FRAME_TAIL:self.on_frame(bytes(buf))
+                    if b==FRAME_TAIL:self.rx_queue.append(bytes(buf))
                     st="WAIT_HEAD"
-            except:break
+            except Exception:
+                break
+        # 读线程退出 = 物理断开
+        self.running=False
+        self.rx_queue=[]  # thread-safe
+        self._lock=threading.Lock()
     def send(self,d):
         if self.ser and self.ser.is_open:self.ser.write(d);self.ser.flush();return True
         return False
@@ -165,6 +190,7 @@ class MainWindow(QMainWindow):
         self.history=[];self.frame_count=0
         self._build()
         self._wd=QTimer(self);self._wd.timeout.connect(self._wd_tick);self._wd.start(1500)
+        self._dt=QTimer(self);self._dt.timeout.connect(self._drain_frames);self._dt.start(50)
 
     # ============= 布局 =============
     def _build(self):
@@ -182,6 +208,10 @@ class MainWindow(QMainWindow):
         tb.addWidget(self.st)
         self.cnt=QLabel("帧: 0")
         self.cnt.setStyleSheet("color:#64748B;font-size:10pt");tb.addWidget(self.cnt)
+        self.led_status=QLabel("○ LED 未知")
+        self.led_status.setStyleSheet("color:#64748B;font-size:10pt;"
+                                       "background:#F1F5F9;padding:4px 12px;border-radius:8px")
+        tb.addWidget(self.led_status)
         root.addLayout(tb)
 
         # ---- 工具栏 ----
@@ -226,12 +256,12 @@ class MainWindow(QMainWindow):
     def _left_panel(self):
         f=QFrame();f.setObjectName("Card")
         v=QVBoxLayout(f);v.setContentsMargins(12,8,12,8);v.setSpacing(8)
-        v.addWidget(QLabel("📊 实时数据"));v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
+        v.addWidget(QLabel("[*] 实时数据"));v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
 
         # DHT
         d=QFrame();d.setObjectName("Card");d.setStyleSheet("border:1px solid #DBEAFE")
         dv=QVBoxLayout(d);dv.setSpacing(2);dv.setContentsMargins(10,6,10,6)
-        dv.addWidget(QLabel("🌡️ 温湿度 · 前端 0x02"))
+        dv.addWidget(QLabel("[DHT] 温湿度 · 前端 0x02"))
         dv.itemAt(dv.count()-1).widget().setObjectName("CardTitle")
         g=QGridLayout();g.setSpacing(4)
         self.dht_t=QLabel("--.-");self.dht_t.setObjectName("BigNumber")
@@ -250,7 +280,7 @@ class MainWindow(QMainWindow):
         # MPU
         d2=QFrame();d2.setObjectName("Card");d2.setStyleSheet("border:1px solid #D1FAE5")
         dv2=QVBoxLayout(d2);dv2.setSpacing(2);dv2.setContentsMargins(10,6,10,6)
-        dv2.addWidget(QLabel("📐 姿态角 · 前端 0x03"))
+        dv2.addWidget(QLabel("[MPU] 姿态角 · 前端 0x03"))
         dv2.itemAt(dv2.count()-1).widget().setObjectName("CardTitle")
         g2=QGridLayout();g2.setSpacing(4)
         for col,key,color in [(0,"Pitch","#10B981"),(1,"Roll","#F59E0B"),(2,"Yaw","#EF4444")]:
@@ -274,7 +304,7 @@ class MainWindow(QMainWindow):
         v=QVBoxLayout(f);v.setContentsMargins(10,6,10,6);v.setSpacing(6)
 
         hdr=QHBoxLayout()
-        hdr.addWidget(QLabel("📡 实时帧流"));hdr.itemAt(hdr.count()-1).widget().setObjectName("CardTitle")
+        hdr.addWidget(QLabel("[*] 实时帧流"));hdr.itemAt(hdr.count()-1).widget().setObjectName("CardTitle")
         hdr.addStretch()
         self.frame_cnt_label=QLabel()
         self.frame_cnt_label.setStyleSheet("color:#64748B;font-size:9pt")
@@ -285,12 +315,12 @@ class MainWindow(QMainWindow):
 
         # 历史表格
         hdr2=QHBoxLayout()
-        hdr2.addWidget(QLabel("📋 历史记录 (点击查看解析详情)"))
+        hdr2.addWidget(QLabel("[*] 历史记录 (点击查看解析详情)"))
         hdr2.itemAt(hdr2.count()-1).widget().setObjectName("CardTitle")
         hdr2.addStretch()
-        exp=QPushButton("📄 导出 CSV");exp.setObjectName("ExportBtn")
+        exp=QPushButton("[=] 导出 CSV");exp.setObjectName("ExportBtn")
         exp.clicked.connect(self._export_history);hdr2.addWidget(exp)
-        clr=QPushButton("🗑 清空");clr.setObjectName("ExportBtn")
+        clr=QPushButton("[X] 清空");clr.setObjectName("ExportBtn")
         clr.clicked.connect(self._clear_history);hdr2.addWidget(clr)
         v.addLayout(hdr2)
 
@@ -316,26 +346,26 @@ class MainWindow(QMainWindow):
         f=QFrame();f.setObjectName("Card")
         v=QVBoxLayout(f);v.setContentsMargins(12,8,12,8);v.setSpacing(6)
 
-        v.addWidget(QLabel("💡 使用说明"));v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
+        v.addWidget(QLabel("[i] 使用说明"));v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
         steps=[
-            "1️⃣ 扫描串口 → 选择 → 连接",
-            "2️⃣ 点示例按钮发送预设帧",
-            "3️⃣ 观察左侧大数字刷新",
-            "4️⃣ 点击历史记录查看解析",
-            "5️⃣ 导出 CSV 保存数据",
+            "[1] 扫描串口 -> 选择 -> 连接",
+            "[2] 点击示例按钮发送预设帧",
+            "[3] 观察左侧大数字刷新",
+            "[4] 点击历史记录查看解析详情",
+            "[5] 导出 CSV 保存数据",
         ]
         for s in steps:
             v.addWidget(QLabel(f"<span style='color:#64748B;font-size:9pt'>{s}</span>"))
 
         v.addSpacing(6)
-        v.addWidget(QLabel("📋 示例帧 (可复制 HEX)"));v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
+        v.addWidget(QLabel("[*] 示例帧 (可复制 HEX)"));v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
 
         examples=[
-            ("🌡️ 温湿度应答","AA 01 05 01 01 2C 01 F4 27 55",
+            ("[DHT] 温湿度应答","AA 01 05 01 01 2C 01 F4 27 55",
              "温度 30.0°C (0x012C) · 湿度 50.0% (0x01F4)\n效果: LCD 左侧卡片更新"),
-            ("📐 姿态角应答","AA 01 0D 02 00 00 70 41 00 00 F0 C1 00 00 34 42 7E 55",
+            ("[MPU] 姿态角应答","AA 01 0D 02 00 00 70 41 00 00 F0 C1 00 00 34 42 7E 55",
              "Pitch=15° · Roll=-30° · Yaw=45°\n效果: LCD 右侧卡片更新"),
-            ("💡 LED ON 应答","AA 01 02 03 01 1C 55",
+            ("[LED] LED ON 应答","AA 01 02 03 01 D6 55",
              "LED 状态=1 (点亮)\n效果: 板载 LED1 点亮"),
         ]
         for label,hex_text,explain in examples:
@@ -355,7 +385,7 @@ class MainWindow(QMainWindow):
             v.addWidget(box)
 
         v.addSpacing(6)
-        v.addWidget(QLabel("✏️ 手动发送"));v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
+        v.addWidget(QLabel("[*] 手动发送"));v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
         r2=QHBoxLayout()
         self.send_edit=QLineEdit()
         self.send_edit.setPlaceholderText("AA 01 05 01 01 2C 01 F4 27 55")
@@ -365,7 +395,7 @@ class MainWindow(QMainWindow):
 
         # 详情面板
         v.addSpacing(6)
-        v.addWidget(QLabel("🔍 解析详情 (点击历史记录查看)"))
+        v.addWidget(QLabel("[*] 解析详情 (点击历史记录查看)"))
         v.itemAt(v.count()-1).widget().setObjectName("CardTitle")
         self.detail=QTextEdit();self.detail.setReadOnly(True)
         self.detail.setHtml('<div style="color:#94A3B8;text-align:center;padding:20px">'
@@ -378,9 +408,9 @@ class MainWindow(QMainWindow):
         v=QHBoxLayout(f);v.setContentsMargins(12,5,12,5);v.setSpacing(6)
         v.addWidget(QLabel("快捷:"))
         for label,hex_text in [
-            ("🌡️ DHT 30/50","AA 01 05 01 01 2C 01 F4 27 55"),
+            ("[DHT] DHT 30/50","AA 01 05 01 01 2C 01 F4 27 55"),
             ("📐 MPU 15/-30/45","AA 01 0D 02 00 00 70 41 00 00 F0 C1 00 00 34 42 7E 55"),
-            ("💡 LED ON","AA 01 02 03 01 1C 55"),
+            ("[LED] LED ON","AA 01 02 03 01 D6 55"),
         ]:
             b=QPushButton(label);b.setObjectName("PresetBtn")
             b.clicked.connect(lambda _,h=hex_text:self._send(h));v.addWidget(b)
@@ -440,16 +470,23 @@ class MainWindow(QMainWindow):
                                   "background:#FEF2F2;padding:6px 14px;border-radius:8px")
             self.cn.setText("🔌 连接");self.cn.setObjectName("ConnectBtn")
 
+    def _drain_frames(self):
+        if not self.reader: return
+        for frame in self.reader.drain():
+            self._on_frame(frame)
+
     def _wd_tick(self):
-        if self.reader and self.reader.running:
-            port=self.port_cb.currentText()
-            try:
-                t=serial.Serial(port,int(self.baud.currentText()),timeout=0.05)
-                t.close()
-                self.reader.stop();self.reader=None
+        # 已连接: 检查读线程是否死了 (物理拔出时 read() 抛异常退出)
+        if self.reader is not None:
+            thr=self.reader.thr
+            if thr is None or not thr.is_alive():
+                port=self.port_cb.currentText()
+                try:self.reader.stop()
+                except:pass
+                self.reader=None
                 self._set_ui(False);self.statusBar().showMessage(f"⚠ 串口 {port} 已断开",3000)
-            except:pass
             return
+        # 未连接: 扫描可用串口更新下拉框
         avail=self._scan_ports()
         cur=[self.port_cb.itemText(i)for i in range(self.port_cb.count())]
         if avail!=cur:
@@ -485,9 +522,23 @@ class MainWindow(QMainWindow):
         # 大数字
         self._update_big_display(ok,info,ts)
 
+        # LED 状态
+        if ok and int(info["type"],16)==0x03:
+            try:
+                payload=bytes.fromhex(info["payload"].replace(" ",""))
+                if len(payload)>=1:
+                    self.led_status.setText("● LED 亮" if payload[0] else "○ LED 灭")
+                    self.led_status.setStyleSheet(
+                        "color:#059669;font-weight:bold;font-size:10pt;"
+                        "background:#ECFDF5;padding:4px 12px;border-radius:8px"
+                        if payload[0] else
+                        "color:#64748B;font-weight:bold;font-size:10pt;"
+                        "background:#F1F5F9;padding:4px 12px;border-radius:8px")
+            except:pass
+
     def _add_history_row(self,ts,direction,info):
         ok=info.get("crc_ok_flag",False)
-        icon=info.get("type_icon","❓")
+        icon=info.get("type_icon","[?]")
         name=info.get("type_name","未知")
         addr=info.get("addr_name","?")
         color=info["type_color"] if ok else "#EF4444"
@@ -593,6 +644,9 @@ class MainWindow(QMainWindow):
         self.dht_t.setText("--.-");self.dht_h.setText("--.-");self.dht_ts.setText("⏱ 等待数据...")
         self.mpu_pitch.setText("--.-");self.mpu_roll.setText("--.-");self.mpu_yaw.setText("--.-")
         self.mpu_ts.setText("⏱ 等待数据...")
+        self.led_status.setText("○ LED 未知")
+        self.led_status.setStyleSheet("color:#64748B;font-size:10pt;"
+                                       "background:#F1F5F9;padding:4px 12px;border-radius:8px")
         self.detail.setHtml('<div style="color:#94A3B8;text-align:center;padding:20px">'
                             '← 点击左侧历史记录查看解析</div>')
         self.statusBar().showMessage("已清空",2000)
@@ -608,15 +662,36 @@ class MainWindow(QMainWindow):
             if self.reader.send(d):
                 ts=datetime.now().strftime("%H:%M:%S.%f")[:-3]
                 hex_str=" ".join(f"{b:02X}"for b in d)
+                # 帧流
                 self.stream.append(
-                    f'<span style="color:#3B82F6;font-weight:bold">⬆ [TX] {hex_str}</span><br>')
+                    f'<span style="color:#3B82F6;font-weight:bold">[TX] {hex_str}</span><br>')
                 sb=self.stream.verticalScrollBar();sb.setValue(sb.maximum())
-                tx_info={"crc_ok_flag":True,"type_name":"TX 发送","type_icon":"⬆",
-                         "type_color":"#3B82F6","addr_name":"本机","raw":hex_str,
-                         "addr":"—","type":"—","length":"—","payload":"—",
-                         "crc_recv":"—","crc_calc":"—"}
-                self._add_history_row(ts,"⬆ TX",tx_info)
-                self.history.append((ts,hex_str,tx_info))
+                # 解析帧并更新大数字
+                ok,info=parse_frame(d)
+                if ok:
+                    info["type_name"]="TX "+info["type_name"]
+                    info["addr_name"]="本机→"+info["addr_name"]
+                    self._update_big_display(ok,info,ts)
+                    # LED 状态
+                    if int(info["type"],16)==0x03:
+                        try:
+                            payload=bytes.fromhex(info["payload"].replace(" ",""))
+                            if len(payload)>=1:
+                                self.led_status.setText("● LED 亮" if payload[0] else "○ LED 灭")
+                                self.led_status.setStyleSheet(
+                                    "color:#059669;font-weight:bold;font-size:10pt;"
+                                    "background:#ECFDF5;padding:4px 12px;border-radius:8px"
+                                    if payload[0] else
+                                    "color:#64748B;font-weight:bold;font-size:10pt;"
+                                    "background:#F1F5F9;padding:4px 12px;border-radius:8px")
+                        except:pass
+                else:
+                    info={"crc_ok_flag":False,"type_name":"TX 发送","type_icon":"⬆",
+                          "type_color":"#3B82F6","addr_name":"本机","raw":hex_str,
+                          "addr":"—","type":"—","length":"—","payload":"—",
+                          "crc_recv":"—","crc_calc":"—"}
+                self._add_history_row(ts,"⬆ TX",info)
+                self.history.append((ts,hex_str,info))
                 if len(self.history)>200:self.history=self.history[-200:]
                 self.statusBar().showMessage(f"已发送 {len(d)} 字节",1500)
         except ValueError:
