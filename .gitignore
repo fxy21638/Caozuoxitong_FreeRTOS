@@ -32,3 +32,9 @@ Listing/
 # J-Link debug
 JLinkLog.txt
 JLinkSettings.ini
+
+# IDE generated
+.vscode/
+.cmsis/
+.eide/
+*.code-workspace
