@@ -151,7 +151,7 @@ typedef struct { int32_t x; int32_t y; } TouchEvent_t;
 
 static QueueHandle_t g_gui_queue = NULL;
 
-/* ������ (lantian �ܹ�: ISR���ź���������) */
+/* ������ (lantian �ܹ�: ISR���ź���������) */
 QueueHandle_t xTouchQueue     = NULL;
 QueueHandle_t xTouchSemaphore = NULL;       /* �?GUI_Task                  */
 
@@ -244,7 +244,7 @@ static void RS485RxTask(void *pvParameters)
     }
 }
 
-#if 0  /* ---- PollTask 已禁用：改为 KEY1/KEY2 手动触发 (GUI_Task 处理) ---- */
+#if 1  /* ---- PollTask 启用：每 10 秒轮询 DHT+MPU (保留 KEY1/KEY2 手动触发) ---- */
 /* -------------------------------------------------------------------------- */
 /*  轮询任务 (优先�?4)                                                         */
 /* -------------------------------------------------------------------------- */
@@ -253,36 +253,23 @@ static void PollTask(void *pvParameters)
     (void)pvParameters;
     RS485TxRequest_t req;
     TickType_t last_wake;
-    uint8_t retry;
 
     vTaskDelay(pdMS_TO_TICKS(2000));
     last_wake = xTaskGetTickCount();
 
     while (1) {
+        /* 1) 请求 DHT (采集前端 1) */
         printf("[POLL] request DHT from 0x02\n");
         req.dest_addr = ADDR_COLLECTOR_1;
         req.msg_type  = MSG_TYPE_TEMP_HUMI;
         req.data_len  = 0;
+        xQueueSend(g_tx_queue, &req, portMAX_DELAY);
 
-        for (retry = 0; retry < 2; retry++) {
-            g_response_ok = 0;
-            xQueueSend(g_tx_queue, &req, portMAX_DELAY);
-            vTaskDelay(pdMS_TO_TICKS(RETRY_TIMEOUT_MS));
-            if (g_response_ok) break;
-            if (retry == 0) printf("[POLL] retry C1...\n");
-        }
-
+        /* 2) 请求 MPU (采集前端 2) */
         printf("[POLL] request MPU from 0x03\n");
         req.dest_addr = ADDR_COLLECTOR_2;
         req.msg_type  = MSG_TYPE_MPU6050;
-
-        for (retry = 0; retry < 2; retry++) {
-            g_response_ok = 0;
-            xQueueSend(g_tx_queue, &req, portMAX_DELAY);
-            vTaskDelay(pdMS_TO_TICKS(RETRY_TIMEOUT_MS));
-            if (g_response_ok) break;
-            if (retry == 0) printf("[POLL] retry C2...\n");
-        }
+        xQueueSend(g_tx_queue, &req, portMAX_DELAY);
 
         vTaskDelayUntil(&last_wake, pdMS_TO_TICKS(POLL_INTERVAL_MS));
     }
@@ -311,7 +298,7 @@ static void BSP_Init(void)
     LCD_Clear(LCD_COLOR_BLACK);
     RS485_Config();
 
-    /* lantian ��������ʼ�� */
+    /* lantian ��������ʼ�� */
     xTouchQueue     = xQueueCreate(10, sizeof(TouchEvent_t));
     xTouchSemaphore = xSemaphoreCreateBinary();
 
@@ -340,7 +327,8 @@ int main(void)
 
     xTaskCreate(RS485RxTask, "RS485Rx", 512, NULL, 6, &RS485RxTask_Handle);
     xTaskCreate(RS485TxTask, "RS485Tx", 256, NULL, 5, NULL);
-    /* PollTask 已禁�?�?改为 KEY1/KEY2 手动触发 (GUI_Task 内处理按�? */
+    /* PollTask ����: ÿ 10 ������ѯ, ���� KEY1/KEY2 ����ȡ�� */
+    xTaskCreate(PollTask,    "Poll",    512, NULL, 4, NULL);
     xTaskCreate(GUI_Task,    "GUI",    4096, (void *)g_gui_queue, 3, NULL);
 
     printf("Scheduler start...\n\n");

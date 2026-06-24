@@ -11,6 +11,7 @@
 #include "../key/bsp_key.h"
 #include "../protocol/protocol.h"
 #include "../config.h"
+#include "../led/bsp_led.h"
 #include "../touch/gt9xx.h"
 #include "FreeRTOS.h"
 #include "task.h"
@@ -190,7 +191,7 @@ static void DrawMenuBar(void)
     FillR(x1, tab_y, tab_w, tab_h, bg1);
     LCD_SetTextColor(border1);
     LCD_DrawRect(x1, tab_y, tab_w, tab_h);
-    Put(x1 + 34, tab_y + 6, fg1, bg1, "DHT22 Detail");
+    Put(x1 + 44, tab_y + 6, fg1, bg1, "DHT22");
 
     /* Tab 2: MPU6050 Detail */
     uint8_t act2 = (g_current_page == 2);
@@ -200,7 +201,7 @@ static void DrawMenuBar(void)
     FillR(x2, tab_y, tab_w, tab_h, bg2);
     LCD_SetTextColor(border2);
     LCD_DrawRect(x2, tab_y, tab_w, tab_h);
-    Put(x2 + 26, tab_y + 6, fg2, bg2, "MPU6050 Detail");
+    Put(x2 + 42, tab_y + 6, fg2, bg2, "MPU6050");
 }
 
 static void RefreshSensors(void);
@@ -234,10 +235,10 @@ static void DrawButtons(void)
 {
     /* iOS style filled blue buttons with white text */
     DrawButton(BTN_DHT_X, BTN_DHT_Y, BTN_DHT_W, BTN_H, COL_ACCENT, COL_ACCENT);
-    Put(BTN_DHT_X + 14, BTN_DHT_Y + 6, COL_WHITE, COL_ACCENT, "REQ DHT");
+    Put(BTN_DHT_X + 14, BTN_DHT_Y + 5, COL_WHITE, COL_ACCENT, "REQ DHT");
 
     DrawButton(BTN_MPU_X, BTN_MPU_Y, BTN_MPU_W, BTN_H, COL_ACCENT, COL_ACCENT);
-    Put(BTN_MPU_X + 14, BTN_MPU_Y + 6, COL_WHITE, COL_ACCENT, "REQ MPU");
+    Put(BTN_MPU_X + 14, BTN_MPU_Y + 5, COL_WHITE, COL_ACCENT, "REQ MPU");
 }
 
 /* ========================================================================== */
@@ -283,12 +284,11 @@ static void HandleTouch(uint16_t x, uint16_t y)
         return;
     }
 
-    /* 2. 根据当前页面判断其他按钮的点击 */
+    /* 2. 根据当前页面判断其他按钮的点击 (GT9157 实测坐标) */
     RS485TxRequest_t req;
     if (g_current_page == 0)
     {
-        if (x >= BTN_DHT_X && x < BTN_DHT_X + BTN_DHT_W &&
-            y >= BTN_DHT_Y && y < BTN_DHT_Y + BTN_H)
+        if (x >= 241 && x < 381 && y >= 210 && y < 250)
         {
             printf("[TOUCH] DHT (Dashboard)\n");
             req.dest_addr = ADDR_COLLECTOR_1;
@@ -296,8 +296,7 @@ static void HandleTouch(uint16_t x, uint16_t y)
             req.data_len = 0;
             xQueueSend(g_tx_queue, &req, 0);
         }
-        else if (x >= BTN_MPU_X && x < BTN_MPU_X + BTN_MPU_W &&
-                 y >= BTN_MPU_Y && y < BTN_MPU_Y + BTN_H)
+        else if (x >= 418 && x < 558 && y >= 210 && y < 250)
         {
             printf("[TOUCH] MPU (Dashboard)\n");
             req.dest_addr = ADDR_COLLECTOR_2;
@@ -308,7 +307,7 @@ static void HandleTouch(uint16_t x, uint16_t y)
     }
     else if (g_current_page == 1)
     {
-        if (x >= 636 && x < 776 && y >= 218 && y < 246)
+        if (x >= 500 && x < 700 && y >= 210 && y < 250)
         {
             printf("[TOUCH] DHT (Detail)\n");
             req.dest_addr = ADDR_COLLECTOR_1;
@@ -319,7 +318,7 @@ static void HandleTouch(uint16_t x, uint16_t y)
     }
     else if (g_current_page == 2)
     {
-        if (x >= 636 && x < 776 && y >= 218 && y < 246)
+        if (x >= 500 && x < 700 && y >= 210 && y < 250)
         {
             printf("[TOUCH] MPU (Detail)\n");
             req.dest_addr = ADDR_COLLECTOR_2;
@@ -470,7 +469,7 @@ static void DrawStaticUI(void)
 
         /* Touch Button inside details history header (right-aligned) */
         DrawButton(636, 218, 140, 28, COL_ACCENT, COL_ACCENT);
-        Put(636 + 14, 218 + 6, COL_WHITE, COL_ACCENT, "REQ DHT");
+        Put(636 + 14, 218 + 5, COL_WHITE, COL_ACCENT, "REQ");
     }
     else if (g_current_page == 2)
     {
@@ -522,7 +521,7 @@ static void DrawStaticUI(void)
 
         /* Touch Button inside details history header (right-aligned) */
         DrawButton(636, 218, 140, 28, COL_ACCENT, COL_ACCENT);
-        Put(636 + 14, 218 + 6, COL_WHITE, COL_ACCENT, "REQ MPU");
+        Put(636 + 14, 218 + 5, COL_WHITE, COL_ACCENT, "REQ");
     }
 
     /* Bottom Tab Bar */
@@ -668,15 +667,20 @@ static void RefreshHistory(void)
                 entry = dht_cnt + 1;
                 line_y = HIST_HDR_Y + 50 + dht_cnt * 25;
                 bg = (dht_cnt & 1) ? COL_CARD : COL_PALE;
-                FillR(14, line_y, DIV_X - 22, 24, bg);
+                FillR(14, line_y, 220, 20, bg);
 
-                snprintf(g_buf, sizeof(g_buf), " %d:%4.1fC/%2.0f%% %2lus   ",
-                         entry, g_history[idx].data.dht.temp,
-                         g_history[idx].data.dht.humi, age);
-                Put(20, line_y, COL_TEXT_PRI, bg, g_buf);
+                /* 分列对齐: 序号 | 温度 | 湿度 | 时间 */
+                snprintf(g_buf, sizeof(g_buf), "%2d", entry);
+                Put(18, line_y + 2, COL_TEXT_PRI, bg, g_buf);
+                snprintf(g_buf, sizeof(g_buf), "%.1fC", g_history[idx].data.dht.temp);
+                Put(56, line_y + 2, COL_TEXT_PRI, bg, g_buf);
+                snprintf(g_buf, sizeof(g_buf), "%.0f%%", g_history[idx].data.dht.humi);
+                Put(120, line_y + 2, COL_TEXT_PRI, bg, g_buf);
+                snprintf(g_buf, sizeof(g_buf), "%lus", age);
+                Put(170, line_y + 2, COL_TEXT_SEC, bg, g_buf);
 
                 /* Draw row bottom divider line */
-                FillR(14, line_y + 24, DIV_X - 22, 1, COL_BORDER);
+                FillR(14, line_y + 20, 220, 1, COL_BORDER);
                 dht_cnt++;
             }
             else if (g_history[idx].type == GUI_SENSOR_MPU6050 && mpu_cnt < HIST_PER_COL)
@@ -684,15 +688,21 @@ static void RefreshHistory(void)
                 entry = mpu_cnt + 1;
                 line_y = HIST_HDR_Y + 50 + mpu_cnt * 25;
                 bg = (mpu_cnt & 1) ? COL_CARD : COL_PALE;
-                FillR(DIV_X + 10, line_y, LCD_PIXEL_WIDTH - DIV_X - 24, 24, bg);
+                FillR(DIV_X + 10, line_y, 320, 20, bg);
 
-                snprintf(g_buf, sizeof(g_buf), " %d:P%.0f R%.0f Y%.0f %lus   ",
-                         entry, g_history[idx].data.mpu.pitch,
-                         g_history[idx].data.mpu.roll,
-                         g_history[idx].data.mpu.yaw, age);
-                Put(DIV_X + 16, line_y, COL_TEXT_PRI, bg, g_buf);
+                /* 分列对齐: 序号 | Pitch | Roll | Yaw | 时间 */
+                snprintf(g_buf, sizeof(g_buf), "%2d", entry);
+                Put(DIV_X + 16, line_y + 2, COL_TEXT_PRI, bg, g_buf);
+                snprintf(g_buf, sizeof(g_buf), "P%.0f", g_history[idx].data.mpu.pitch);
+                Put(DIV_X + 50, line_y + 2, COL_TEXT_PRI, bg, g_buf);
+                snprintf(g_buf, sizeof(g_buf), "R%.0f", g_history[idx].data.mpu.roll);
+                Put(DIV_X + 120, line_y + 2, COL_TEXT_PRI, bg, g_buf);
+                snprintf(g_buf, sizeof(g_buf), "Y%.0f", g_history[idx].data.mpu.yaw);
+                Put(DIV_X + 190, line_y + 2, COL_TEXT_PRI, bg, g_buf);
+                snprintf(g_buf, sizeof(g_buf), "%lus", age);
+                Put(DIV_X + 260, line_y + 2, COL_TEXT_SEC, bg, g_buf);
 
-                FillR(DIV_X + 10, line_y + 24, LCD_PIXEL_WIDTH - DIV_X - 24, 1, COL_BORDER);
+                FillR(DIV_X + 10, line_y + 20, 320, 1, COL_BORDER);
                 mpu_cnt++;
             }
         }
@@ -701,19 +711,19 @@ static void RefreshHistory(void)
         {
             line_y = HIST_HDR_Y + 50 + i * 25;
             bg = (i & 1) ? COL_CARD : COL_PALE;
-            FillR(14, line_y, DIV_X - 22, 24, bg);
+            FillR(14, line_y, 210, 20, bg);
             snprintf(g_buf, sizeof(g_buf), " %d:  ---                  ", i + 1);
             Put(20, line_y, COL_TEXT_SEC, bg, g_buf);
-            FillR(14, line_y + 24, DIV_X - 22, 1, COL_BORDER);
+            FillR(14, line_y + 20, 220, 1, COL_BORDER);
         }
         for (i = mpu_cnt; i < HIST_PER_COL; i++)
         {
             line_y = HIST_HDR_Y + 50 + i * 25;
             bg = (i & 1) ? COL_CARD : COL_PALE;
-            FillR(DIV_X + 10, line_y, LCD_PIXEL_WIDTH - DIV_X - 24, 24, bg);
+            FillR(DIV_X + 10, line_y, 320, 20, bg);
             snprintf(g_buf, sizeof(g_buf), " %d:  ---                  ", i + 1);
             Put(DIV_X + 16, line_y, COL_TEXT_SEC, bg, g_buf);
-            FillR(DIV_X + 10, line_y + 24, LCD_PIXEL_WIDTH - DIV_X - 24, 1, COL_BORDER);
+            FillR(DIV_X + 10, line_y + 20, 320, 1, COL_BORDER);
         }
 
         /* Draw center divider line for history */
@@ -733,7 +743,7 @@ static void RefreshHistory(void)
                 entry = dht_cnt + 1;
                 line_y = 250 + dht_cnt * 24;
                 bg = (dht_cnt & 1) ? COL_CARD : COL_PALE;
-                FillR(14, line_y, LCD_PIXEL_WIDTH - 28, 24, bg);
+                FillR(14, line_y, LCD_PIXEL_WIDTH - 28, 20, bg);
 
                 snprintf(g_buf, sizeof(g_buf), " #%d: Temp: %.1fC | Humi: %.1f%% | %lus ago",
                          entry, g_history[idx].data.dht.temp,
@@ -746,7 +756,7 @@ static void RefreshHistory(void)
         {
             line_y = 250 + i * 24;
             bg = (i & 1) ? COL_CARD : COL_PALE;
-            FillR(14, line_y, LCD_PIXEL_WIDTH - 28, 24, bg);
+            FillR(14, line_y, LCD_PIXEL_WIDTH - 28, 20, bg);
             snprintf(g_buf, sizeof(g_buf), " #%d: ---", i + 1);
             Put(20, line_y, COL_TEXT_SEC, bg, g_buf);
         }
@@ -765,7 +775,7 @@ static void RefreshHistory(void)
                 entry = mpu_cnt + 1;
                 line_y = 250 + mpu_cnt * 24;
                 bg = (mpu_cnt & 1) ? COL_CARD : COL_PALE;
-                FillR(14, line_y, LCD_PIXEL_WIDTH - 28, 24, bg);
+                FillR(14, line_y, LCD_PIXEL_WIDTH - 28, 20, bg);
 
                 snprintf(g_buf, sizeof(g_buf), " #%d: P:%.1f | R:%.1f | Y:%.1f | %lus ago",
                          entry, g_history[idx].data.mpu.pitch,
@@ -779,7 +789,7 @@ static void RefreshHistory(void)
         {
             line_y = 250 + i * 24;
             bg = (i & 1) ? COL_CARD : COL_PALE;
-            FillR(14, line_y, LCD_PIXEL_WIDTH - 28, 24, bg);
+            FillR(14, line_y, LCD_PIXEL_WIDTH - 28, 20, bg);
             snprintf(g_buf, sizeof(g_buf), " #%d: ---", i + 1);
             Put(20, line_y, COL_TEXT_SEC, bg, g_buf);
         }
@@ -853,13 +863,22 @@ void GUI_Task(void *pvParameters)
             k1_stable = k1;
             if (k1_stable == KEY_ON)
             {
-                /* KEY1 press -> DHT */
-                printf("[KEY] KEY1 pressed -> request DHT\n");
-                QueueSensorRequest(ADDR_COLLECTOR_1, MSG_TYPE_TEMP_HUMI);
+                /* KEY1: 翻转 DHT22 前端 LED */
+                static uint8_t dht_led = 0;
+                dht_led = !dht_led;
+                printf("[KEY] KEY1 pressed -> toggle DHT LED %s\n", dht_led ? "ON" : "OFF");
+                {
+                    RS485TxRequest_t led_req;
+                    led_req.dest_addr = ADDR_COLLECTOR_1;
+                    led_req.msg_type = MSG_TYPE_LED_CTRL;
+                    led_req.data[0] = dht_led ? 1 : 0;
+                    led_req.data_len = 1;
+                    xQueueSend(g_tx_queue, &led_req, 0);
+                }
             }
         }
 
-        /* KEY2 (PC13) ?请求 MPU6050 (短按 50ms 消抖) */
+        /* KEY2 (PC13): 翻转 MPU6050 前端 LED */
         if (k2 != k2_last_raw)
         {
             k2_last_raw = k2;
@@ -871,8 +890,17 @@ void GUI_Task(void *pvParameters)
             k2_stable = k2;
             if (k2_stable == KEY_ON)
             {
-                printf("[KEY] KEY2 pressed -> request MPU\n");
-                QueueSensorRequest(ADDR_COLLECTOR_2, MSG_TYPE_MPU6050);
+                static uint8_t mpu_led = 0;
+                mpu_led = !mpu_led;
+                printf("[KEY] KEY2 pressed -> toggle MPU LED %s\n", mpu_led ? "ON" : "OFF");
+                {
+                    RS485TxRequest_t led_req;
+                    led_req.dest_addr = ADDR_COLLECTOR_2;
+                    led_req.msg_type = MSG_TYPE_LED_CTRL;
+                    led_req.data[0] = mpu_led ? 1 : 0;
+                    led_req.data_len = 1;
+                    xQueueSend(g_tx_queue, &led_req, 0);
+                }
             }
         }
 
@@ -942,7 +970,7 @@ void GUI_Task(void *pvParameters)
             HistoryAdd(&msg);
         }
 
-        /* 触摸屏已禁用 ??GUI_Task 入口 */
+        /* 触摸屏扫描 (lantian ISR→信号量→GTP_TouchProcess) */
         if (xSemaphoreTake(xTouchSemaphore, 0) == pdTRUE)
         {
             GTP_TouchProcess();
